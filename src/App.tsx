@@ -243,7 +243,7 @@ function App() {
 
         {/* Footer */}
         <footer className="text-center text-slate-500 text-sm py-4 border-t border-slate-800">
-          <p>IoT Dashboard © 2026 | Real-time monitoring actief</p>
+          <p>IoT Dashboard © 2026 | Realtime monitoring actief</p>
         </footer>
       </div>
 
