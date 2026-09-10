@@ -24,6 +24,11 @@ export function RackCard({ rack, onClick }: RackCardProps) {
 
   const color = getColor(rack.status);
 
+  // Type badge styling
+  const typeBadge = rack.type === "server" 
+    ? { bg: "bg-blue-500/20", text: "text-blue-400", icon: "🖥️", label: "Server" }
+    : { bg: "bg-purple-500/20", text: "text-purple-400", icon: "🌐", label: "Netwerk" };
+
   return (
     <button
       onClick={onClick}
@@ -31,12 +36,18 @@ export function RackCard({ rack, onClick }: RackCardProps) {
     >
       {/* Header met status */}
       <div className="flex items-start justify-between mb-4">
-        <div className="flex flex-col gap-1">
+        <div className="flex flex-col gap-1 flex-1">
           <div className="flex items-center gap-2">
             <StatusDot status={rack.status} />
             <h3 className="text-lg font-semibold text-slate-100">{rack.name}</h3>
           </div>
-          <p className="text-sm text-slate-400 ml-5">{rack.location}</p>
+          <div className="flex items-center gap-2 ml-5">
+            <p className="text-sm text-slate-400">{rack.location}</p>
+            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${typeBadge.bg} ${typeBadge.text} flex items-center gap-1`}>
+              <span>{typeBadge.icon}</span>
+              <span>{typeBadge.label}</span>
+            </span>
+          </div>
         </div>
         <StatusBadge status={rack.status} />
       </div>

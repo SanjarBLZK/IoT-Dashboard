@@ -8,11 +8,15 @@ export interface RackReading {
   humidity: number;    // Luchtvochtigheid in %
 }
 
+// Rack types
+export type RackType = "server" | "network";
+
 // Server rack met alle eigenschappen
 export interface Rack {
   id: number;                    // Uniek ID (1, 2, 3)
   name: string;                  // "Rack A", "Rack B", "Rack C"
   location: string;              // Fysieke positie
+  type: RackType;                // "server" of "network"
   temp: number;                  // Huidige temperatuur
   humidity: number;              // Huidige luchtvochtigheid
   status: RackStatus;            // Afgeleide status

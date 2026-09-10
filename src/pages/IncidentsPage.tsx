@@ -118,66 +118,78 @@ export function IncidentsPage({
           Rack Status Overzicht
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {racks.map((rack) => (
-            <div
-              key={rack.id}
-              className={`
-                border rounded-lg p-4 transition-all
-                ${
-                  rack.status === "critical"
-                    ? "bg-red-950/40 border-red-500/40"
-                    : rack.status === "warn"
-                    ? "bg-amber-950/40 border-amber-500/40"
-                    : "bg-emerald-950/40 border-emerald-500/40"
-                }
-              `}
-            >
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="font-semibold text-slate-100">{rack.name}</h3>
-                <span
-                  className={`
-                    px-2 py-1 rounded-full text-xs font-medium
-                    ${
-                      rack.status === "critical"
-                        ? "bg-red-500/20 text-red-400"
-                        : rack.status === "warn"
-                        ? "bg-amber-500/20 text-amber-400"
-                        : "bg-emerald-500/20 text-emerald-400"
-                    }
-                  `}
-                >
-                  {rack.status === "critical"
-                    ? "Kritiek"
-                    : rack.status === "warn"
-                    ? "Waarschuwing"
-                    : "Normaal"}
-                </span>
-              </div>
-              <div className="text-sm text-slate-400">{rack.location}</div>
-              <div className="mt-3 flex items-center justify-between">
-                <div>
-                  <div className="text-xs text-slate-500">Temperatuur</div>
-                  <div
-                    className={`text-lg font-semibold ${
-                      rack.status === "critical"
-                        ? "text-red-400"
-                        : rack.status === "warn"
-                        ? "text-amber-400"
-                        : "text-emerald-400"
-                    }`}
+          {racks.map((rack) => {
+            const typeBadge = rack.type === "server" 
+              ? { bg: "bg-blue-500/20", text: "text-blue-400", icon: "🖥️", label: "Server" }
+              : { bg: "bg-purple-500/20", text: "text-purple-400", icon: "🌐", label: "Netwerk" };
+
+            return (
+              <div
+                key={rack.id}
+                className={`
+                  border rounded-lg p-4 transition-all
+                  ${
+                    rack.status === "critical"
+                      ? "bg-red-950/40 border-red-500/40"
+                      : rack.status === "warn"
+                      ? "bg-amber-950/40 border-amber-500/40"
+                      : "bg-emerald-950/40 border-emerald-500/40"
+                  }
+                `}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-semibold text-slate-100">{rack.name}</h3>
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${typeBadge.bg} ${typeBadge.text} flex items-center gap-1`}>
+                      <span>{typeBadge.icon}</span>
+                      <span>{typeBadge.label}</span>
+                    </span>
+                  </div>
+                  <span
+                    className={`
+                      px-2 py-1 rounded-full text-xs font-medium
+                      ${
+                        rack.status === "critical"
+                          ? "bg-red-500/20 text-red-400"
+                          : rack.status === "warn"
+                          ? "bg-amber-500/20 text-amber-400"
+                          : "bg-emerald-500/20 text-emerald-400"
+                      }
+                    `}
                   >
-                    {rack.temp.toFixed(1)}°C
-                  </div>
+                    {rack.status === "critical"
+                      ? "Kritiek"
+                      : rack.status === "warn"
+                      ? "Waarschuwing"
+                      : "Normaal"}
+                  </span>
                 </div>
-                <div>
-                  <div className="text-xs text-slate-500">Luchtvochtigheid</div>
-                  <div className="text-lg font-semibold text-cyan-400">
-                    {rack.humidity.toFixed(1)}%
+                <div className="text-sm text-slate-400">{rack.location}</div>
+                <div className="mt-3 flex items-center justify-between">
+                  <div>
+                    <div className="text-xs text-slate-500">Temperatuur</div>
+                    <div
+                      className={`text-lg font-semibold ${
+                        rack.status === "critical"
+                          ? "text-red-400"
+                          : rack.status === "warn"
+                          ? "text-amber-400"
+                          : "text-emerald-400"
+                      }`}
+                    >
+                      {rack.temp.toFixed(1)}°C
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-slate-500">Luchtvochtigheid</div>
+                    <div className="text-lg font-semibold text-cyan-400">
+                      {rack.humidity.toFixed(1)}%
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </section>
 

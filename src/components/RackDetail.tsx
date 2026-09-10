@@ -45,6 +45,11 @@ export function RackDetail({ rack, onClose }: RackDetailProps) {
 
   const color = getColor(rack.status);
 
+  // Type badge styling
+  const typeBadge = rack.type === "server" 
+    ? { bg: "bg-blue-500/20", text: "text-blue-400", icon: "🖥️", label: "Server Rack" }
+    : { bg: "bg-purple-500/20", text: "text-purple-400", icon: "🌐", label: "Netwerk Rack" };
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
@@ -63,10 +68,16 @@ export function RackDetail({ rack, onClose }: RackDetailProps) {
           <div className="flex items-center gap-3">
             <StatusDot status={rack.status} />
             <div>
-              <h2 className="text-2xl font-bold text-slate-100">{rack.name}</h2>
-              <p className="text-sm text-slate-400">{rack.location}</p>
+              <div className="flex items-center gap-3">
+                <h2 className="text-2xl font-bold text-slate-100">{rack.name}</h2>
+                <span className={`px-3 py-1 rounded-full text-sm font-medium ${typeBadge.bg} ${typeBadge.text} flex items-center gap-1.5`}>
+                  <span className="text-base">{typeBadge.icon}</span>
+                  <span>{typeBadge.label}</span>
+                </span>
+                <StatusBadge status={rack.status} />
+              </div>
+              <p className="text-sm text-slate-400 mt-1">{rack.location}</p>
             </div>
-            <StatusBadge status={rack.status} />
           </div>
           <button
             onClick={onClose}
