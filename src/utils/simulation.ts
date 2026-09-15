@@ -45,8 +45,8 @@ export function generateHistoricalData(
     const timestamp = new Date(now.getTime() - i * 30000); // 30 seconden terug
     history.push({
       time: formatTime(timestamp),
-      temp: baseTemp + randomBetween(-2, 2),
-      humidity: baseHumidity + randomBetween(-3, 3),
+      temp: Number((baseTemp + randomBetween(-2, 2)).toFixed(1)),
+      humidity: Number((baseHumidity + randomBetween(-3, 3)).toFixed(1)),
     });
   }
 
@@ -118,8 +118,8 @@ export const samplePhotos = [
 // Update rack met nieuwe sensor reading
 export function updateRackWithNewReading(rack: Rack): Rack {
   const drift = randomBetween(-0.4, 0.4);
-  const newTemp = rack.temp + drift;
-  const newHumidity = rack.humidity + randomBetween(-0.3, 0.3);
+  const newTemp = Number((rack.temp + drift).toFixed(1));
+  const newHumidity = Number((rack.humidity + randomBetween(-0.3, 0.3)).toFixed(1));
   const newStatus = deriveStatus(newTemp);
 
   const newReading: RackReading = {
