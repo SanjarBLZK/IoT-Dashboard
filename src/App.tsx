@@ -23,13 +23,13 @@ function App() {
   const incidentIdRef = useRef(1);
   const previousCriticalRacks = useRef<Set<number>>(new Set());
 
-  // Update sensor data elke 5 seconden (in productie: 60 seconden)
+  // Update sensor data elke minuut
   useEffect(() => {
     const interval = setInterval(() => {
       setRacks((prevRacks) =>
         prevRacks.map((rack) => updateRackWithNewReading(rack))
       );
-    }, 5000); // 5 seconden voor demo, productie: 60000 (1 minuut)
+    }, 60000); // 1 minuut
 
     return () => clearInterval(interval);
   }, []);

@@ -33,7 +33,7 @@ export function formatDateTime(date: Date): string {
   });
 }
 
-// Genereer historische data voor een rack (60 metingen = 30 minuten bij 30sec interval)
+// Genereer historische data voor een rack (60 metingen = 60 minuten bij 1 min interval)
 export function generateHistoricalData(
   baseTemp: number,
   baseHumidity: number
@@ -42,11 +42,11 @@ export function generateHistoricalData(
   const history: RackReading[] = [];
 
   for (let i = 59; i >= 0; i--) {
-    const timestamp = new Date(now.getTime() - i * 30000); // 30 seconden terug
+    const timestamp = new Date(now.getTime() - i * 60000); // 1 minuut terug
     history.push({
       time: formatTime(timestamp),
-      temp: Number((baseTemp + randomBetween(-2, 2)).toFixed(1)),
-      humidity: Number((baseHumidity + randomBetween(-3, 3)).toFixed(1)),
+      temp: Number((baseTemp + randomBetween(-0.2, 0.2)).toFixed(1)),
+      humidity: Number((baseHumidity + randomBetween(-0.5, 0.5)).toFixed(1)),
     });
   }
 
