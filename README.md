@@ -37,6 +37,14 @@ Een real-time monitoring dashboard voor serverruimte temperatuur, luchtvochtighe
   - Camera hoeft niet per se een high-end professionele camera te zijn
   - Visuele feedback bij bewegingsdetectie (rood overlay + alarm)
   - **Incident geschiedenis blijft bewaard** ⭐
+- **Instellingen Pagina**: ⭐ **NIEUW**
+  - **Temperatuur drempelwaarden** (aanpasbare warn/critical limits)
+  - **Audio controle** (volume, aan/uit voor alarms en notificaties)
+  - **Display opties** (update interval, grafiek datapunten, incident geschiedenis)
+  - **Lokaal opgeslagen** in browser met localStorage
+  - **Test Alarm** functie voor audio testing
+  - **Reset naar standaard** met bevestiging
+  - Zie `SETTINGS_QUICK_START.md` voor gebruikershandleiding
 - **Visuele Indicatoren**: 
   - Status dots (OK/Waarschuwing/Kritiek) met glow effecten
   - Circulaire temperatuur gauges (270° SVG arc)
@@ -79,7 +87,8 @@ Een real-time monitoring dashboard voor serverruimte temperatuur, luchtvochtighe
 - [ ] **API Integratie**: RESTful backend connectie
 - [ ] **WebSockets**: Real-time incident push notificaties
 - [ ] **Geluidssensoren**: dB niveau monitoring
-- [ ] **Instellingen Pagina**: Configureerbare drempelwaarden
+- [x] **Instellingen Pagina**: Configureerbare drempelwaarden ✅ **COMPLEET**
+- [ ] **Instellingen Sync**: Supabase synchronisatie voor cross-device
 - [ ] **Database**: PostgreSQL met sensor_data & incidents tabellen
 - [ ] **Python Backend**: Flask API + Camera bewegingsdetectie
 

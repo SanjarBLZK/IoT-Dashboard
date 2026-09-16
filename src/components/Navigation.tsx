@@ -6,6 +6,7 @@ export function Navigation() {
   const navItems = [
     { path: "/", label: "Dashboard", icon: "📊" },
     { path: "/incidents", label: "Gebeurtenissen", icon: "📋" },
+    { path: "/settings", label: "Instellingen", icon: "⚙️" },
   ];
 
   return (

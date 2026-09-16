@@ -18,11 +18,15 @@ function getAudioContext(): AudioContext | null {
 /**
  * Speel een alarm beep af (3x beep patroon)
  * Gebruikt Web Audio API voor cross-browser compatibiliteit
+ * @param volumePercent - Volume percentage (0-100), standaard 15
  */
-export function playAlertBeep(): void {
+export function playAlertBeep(volumePercent: number = 15): void {
   try {
     const ctx = getAudioContext();
     if (!ctx) return;
+
+    // Convert percentage to gain value (0.0 - 1.0)
+    const baseVolume = Math.max(0, Math.min(100, volumePercent)) / 100;
 
     // 3 beeps met tussenpozen
     const beepTimes = [0, 0.3, 0.6]; // Seconden offset
@@ -42,7 +46,7 @@ export function playAlertBeep(): void {
 
       // Volume envelope (fade out voor natuurlijker geluid)
       const startTime = ctx.currentTime + offset;
-      gainNode.gain.setValueAtTime(0.15, startTime); // Start volume (15%)
+      gainNode.gain.setValueAtTime(baseVolume * 0.15, startTime); // Start volume
       gainNode.gain.exponentialRampToValueAtTime(0.001, startTime + 0.2); // Fade out
 
       // Start en stop
@@ -57,11 +61,15 @@ export function playAlertBeep(): void {
 
 /**
  * Speel een subtiele notification sound (voor bewegingsdetectie)
+ * @param volumePercent - Volume percentage (0-100), standaard 10
  */
-export function playNotificationSound(): void {
+export function playNotificationSound(volumePercent: number = 10): void {
   try {
     const ctx = getAudioContext();
     if (!ctx) return;
+
+    // Convert percentage to gain value (0.0 - 1.0)
+    const baseVolume = Math.max(0, Math.min(100, volumePercent)) / 100;
 
     const oscillator = ctx.createOscillator();
     const gainNode = ctx.createGain();
@@ -74,7 +82,7 @@ export function playNotificationSound(): void {
     oscillator.frequency.value = 1200; // Hogere frequentie
 
     const startTime = ctx.currentTime;
-    gainNode.gain.setValueAtTime(0.1, startTime);
+    gainNode.gain.setValueAtTime(baseVolume * 0.1, startTime);
     gainNode.gain.exponentialRampToValueAtTime(0.001, startTime + 0.1);
 
     oscillator.start(startTime);

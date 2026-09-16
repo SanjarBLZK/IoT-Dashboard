@@ -4,8 +4,10 @@ import { Rack, Incident } from "./types";
 import { Navigation } from "./components/Navigation";
 import { Dashboard } from "./pages/Dashboard";
 import { IncidentsPage } from "./pages/IncidentsPage";
+import { SettingsPage } from "./pages/SettingsPage";
 import { playAlertBeep, playNotificationSound } from "./utils/audio";
 import { incidentService } from "./services/incidentService";
+import { useSettings } from "./hooks/useSettings";
 import {
   createInitialRacks,
   updateRackWithNewReading,
@@ -15,6 +17,9 @@ import {
 } from "./utils/simulation";
 
 function App() {
+  // Settings hook
+  const { settings } = useSettings();
+
   // State
   const [racks, setRacks] = useState<Rack[]>(createInitialRacks());
   const [incidents, setIncidents] = useState<Incident[]>([]);
@@ -27,7 +32,8 @@ function App() {
   // Laad bestaande incidents bij opstarten (indien Supabase geconfigureerd)
   useEffect(() => {
     const loadIncidents = async () => {
-      const existingIncidents = await incidentService.getRecentIncidents(20);
+      const maxIncidents = settings.incidentListLength;
+      const existingIncidents = await incidentService.getRecentIncidents(maxIncidents);
       if (existingIncidents && existingIncidents.length > 0) {
         setIncidents(existingIncidents);
         // Update ID ref naar het hoogste ID + 1
@@ -47,25 +53,26 @@ function App() {
         if (prev.some(i => i.id === newIncident.id)) {
           return prev;
         }
-        return [newIncident, ...prev.slice(0, 19)];
+        const maxLength = settings.incidentListLength;
+        return [newIncident, ...prev.slice(0, maxLength - 1)];
       });
     });
 
     return () => {
       if (unsubscribe) unsubscribe();
     };
-  }, []);
+  }, [settings.incidentListLength]);
 
-  // Update sensor data elke minuut
+  // Update sensor data op basis van instellingen interval
   useEffect(() => {
     const interval = setInterval(() => {
       setRacks((prevRacks) =>
-        prevRacks.map((rack) => updateRackWithNewReading(rack))
+        prevRacks.map((rack) => updateRackWithNewReading(rack, settings.warnTemp, settings.criticalTemp))
       );
-    }, 60000); // 1 minuut
+    }, settings.updateInterval * 1000); // Convert seconden naar milliseconden
 
     return () => clearInterval(interval);
-  }, []);
+  }, [settings.updateInterval, settings.warnTemp, settings.criticalTemp]);
 
   // Check voor kritieke temperaturen en speel alarm
   useEffect(() => {
@@ -81,8 +88,13 @@ function App() {
           rack.id,
           rack.name
         );
-        setIncidents((prev) => [alarm, ...prev.slice(0, 19)]);
-        playAlertBeep();
+        const maxLength = settings.incidentListLength;
+        setIncidents((prev) => [alarm, ...prev.slice(0, maxLength - 1)]);
+        
+        // Speel alarm geluid indien ingeschakeld
+        if (settings.audioEnabled) {
+          playAlertBeep(settings.alarmVolume);
+        }
         setAlertDismissed(false);
         
         // Sla op in Supabase
@@ -100,7 +112,7 @@ function App() {
     });
 
     previousCriticalRacks.current = criticalRackIds;
-  }, [racks]);
+  }, [racks, settings.audioEnabled, settings.alarmVolume, settings.incidentListLength]);
 
   // Simuleer bewegingsdetectie (random tussen 45-90 seconden)
   useEffect(() => {
@@ -122,10 +134,13 @@ function App() {
     const motion = createMotionIncident(incidentIdRef.current++);
     
     // Voeg toe aan lokale state
-    setIncidents((prev) => [motion, ...prev.slice(0, 19)]); // Max 20 incidents
+    const maxLength = settings.incidentListLength;
+    setIncidents((prev) => [motion, ...prev.slice(0, maxLength - 1)]); // Max op basis van settings
     
-    // Speel notificatie geluid
-    playNotificationSound();
+    // Speel notificatie geluid indien ingeschakeld
+    if (settings.notificationEnabled) {
+      playNotificationSound(settings.notificationVolume);
+    }
     
     // Sla op in Supabase (als geconfigureerd)
     const saved = await incidentService.saveIncident({
@@ -173,6 +188,18 @@ function App() {
                 <IncidentsPage
                   incidents={incidents}
                   racks={racks}
+                  hasCritical={hasCritical}
+                  criticalRackNames={criticalRackNames}
+                  alertDismissed={alertDismissed}
+                  onAlertDismiss={() => setAlertDismissed(true)}
+                  playAlertBeep={playAlertBeep}
+                />
+              }
+            />
+            <Route
+              path="/settings"
+              element={
+                <SettingsPage
                   hasCritical={hasCritical}
                   criticalRackNames={criticalRackNames}
                   alertDismissed={alertDismissed}

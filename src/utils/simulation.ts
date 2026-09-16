@@ -7,9 +7,9 @@ export function randomBetween(min: number, max: number, decimals = 1): number {
 }
 
 // Status afleiden van temperatuur
-export function deriveStatus(temp: number): RackStatus {
-  if (temp >= 35) return "critical";
-  if (temp >= 28) return "warn";
+export function deriveStatus(temp: number, warnTemp: number = 28, criticalTemp: number = 35): RackStatus {
+  if (temp >= criticalTemp) return "critical";
+  if (temp >= warnTemp) return "warn";
   return "ok";
 }
 
@@ -118,11 +118,15 @@ export const samplePhotos = [
 ];
 
 // Update rack met nieuwe sensor reading
-export function updateRackWithNewReading(rack: Rack): Rack {
+export function updateRackWithNewReading(
+  rack: Rack, 
+  warnTemp: number = 28, 
+  criticalTemp: number = 35
+): Rack {
   const drift = randomBetween(-0.4, 0.4);
   const newTemp = Number((rack.temp + drift).toFixed(1));
   const newHumidity = Number((rack.humidity + randomBetween(-0.3, 0.3)).toFixed(1));
-  const newStatus = deriveStatus(newTemp);
+  const newStatus = deriveStatus(newTemp, warnTemp, criticalTemp);
 
   const newReading: RackReading = {
     time: formatTime(new Date()),
