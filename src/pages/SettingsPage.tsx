@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { useSettings } from "../hooks/useSettings";
 
 interface SettingsPageProps {
   hasCritical: boolean;
@@ -8,39 +9,6 @@ interface SettingsPageProps {
   playAlertBeep: () => void;
 }
 
-interface Settings {
-  // Temperatuur drempelwaarden
-  warnTemp: number;
-  criticalTemp: number;
-  
-  // Audio instellingen
-  audioEnabled: boolean;
-  alarmVolume: number;
-  notificationEnabled: boolean;
-  notificationVolume: number;
-  
-  // Display instellingen
-  darkMode: boolean;
-  updateInterval: number; // in seconden
-  historyPoints: number;
-  incidentListLength: number;
-  colorTheme: "blue" | "purple" | "green" | "red";
-}
-
-const DEFAULT_SETTINGS: Settings = {
-  warnTemp: 28,
-  criticalTemp: 35,
-  audioEnabled: true,
-  alarmVolume: 15,
-  notificationEnabled: true,
-  notificationVolume: 10,
-  darkMode: true,
-  updateInterval: 60,
-  historyPoints: 60,
-  incidentListLength: 20,
-  colorTheme: "blue",
-};
-
 export function SettingsPage({
   hasCritical,
   criticalRackNames,
@@ -48,19 +16,10 @@ export function SettingsPage({
   onAlertDismiss,
   playAlertBeep,
 }: SettingsPageProps) {
-  const [settings, setSettings] = useState<Settings>(() => {
-    // Laad instellingen uit localStorage
-    const saved = localStorage.getItem("iot-dashboard-settings");
-    return saved ? { ...DEFAULT_SETTINGS, ...JSON.parse(saved) } : DEFAULT_SETTINGS;
-  });
+  const { settings, updateSetting, resetSettings, syncStatus, isSupabaseEnabled } = useSettings();
   
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
   const [resetConfirm, setResetConfirm] = useState(false);
-
-  // Sla instellingen op in localStorage bij wijziging
-  useEffect(() => {
-    localStorage.setItem("iot-dashboard-settings", JSON.stringify(settings));
-  }, [settings]);
 
   const handleSave = () => {
     setSaveStatus("saving");
@@ -70,10 +29,9 @@ export function SettingsPage({
     }, 500);
   };
 
-  const handleReset = () => {
+  const handleReset = async () => {
     if (resetConfirm) {
-      setSettings(DEFAULT_SETTINGS);
-      localStorage.removeItem("iot-dashboard-settings");
+      await resetSettings();
       setResetConfirm(false);
       setSaveStatus("saved");
       setTimeout(() => setSaveStatus("idle"), 2000);
@@ -85,12 +43,8 @@ export function SettingsPage({
 
   const handleTestAlarm = () => {
     if (settings.audioEnabled) {
-      playAlertBeep(settings.alarmVolume);
+      playAlertBeep();
     }
-  };
-
-  const updateSetting = <K extends keyof Settings>(key: K, value: Settings[K]) => {
-    setSettings((prev) => ({ ...prev, [key]: value }));
   };
 
   return (
@@ -123,6 +77,24 @@ export function SettingsPage({
         <p className="text-slate-400">
           Pas het dashboard aan naar jouw voorkeuren
         </p>
+        
+        {/* Supabase Status Indicator */}
+        {isSupabaseEnabled && (
+          <div className="mt-4 flex items-center gap-2">
+            <div className={`w-2 h-2 rounded-full ${
+              syncStatus === "syncing" ? "bg-yellow-500 animate-pulse" :
+              syncStatus === "synced" ? "bg-green-500" :
+              syncStatus === "error" ? "bg-red-500" :
+              "bg-slate-600"
+            }`} />
+            <span className="text-xs text-slate-400">
+              {syncStatus === "syncing" && "Synchroniseren met server..."}
+              {syncStatus === "synced" && "✅ Gesynchroniseerd met server"}
+              {syncStatus === "error" && "❌ Synchronisatie mislukt"}
+              {syncStatus === "idle" && "Verbonden met Supabase database"}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Save Status Banner */}
@@ -314,155 +286,6 @@ export function SettingsPage({
         </button>
       </div>
 
-      {/* 3. Display Instellingen */}
-      <div className="bg-slate-800/40 border border-slate-700/50 rounded-xl p-6 space-y-6">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="text-2xl">🎨</div>
-          <h2 className="text-xl font-bold text-slate-100">Display Instellingen</h2>
-        </div>
-
-        {/* Dark mode toggle */}
-        <div className="flex items-center justify-between">
-          <div>
-            <label className="text-slate-300 font-medium">Dark Mode</label>
-            <p className="text-slate-500 text-sm">Donker kleurenschema (standaard)</p>
-          </div>
-          <button
-            onClick={() => updateSetting("darkMode", !settings.darkMode)}
-            className={`relative w-14 h-8 rounded-full transition-colors ${
-              settings.darkMode ? "bg-slate-700" : "bg-blue-600"
-            }`}
-          >
-            <div
-              className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full transition-transform ${
-                settings.darkMode ? "translate-x-6" : ""
-              }`}
-            />
-          </button>
-        </div>
-
-        {/* Update interval */}
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <label className="text-slate-300 font-medium">
-              Sensor Update Interval
-            </label>
-            <span className="text-slate-400 font-bold">
-              {settings.updateInterval}s
-            </span>
-          </div>
-          <div className="grid grid-cols-4 gap-2">
-            {[5, 30, 60, 300].map((seconds) => (
-              <button
-                key={seconds}
-                onClick={() => updateSetting("updateInterval", seconds)}
-                className={`px-3 py-2 rounded-lg font-medium transition-colors ${
-                  settings.updateInterval === seconds
-                    ? "bg-blue-600 text-white"
-                    : "bg-slate-700 text-slate-300 hover:bg-slate-600"
-                }`}
-              >
-                {seconds < 60 ? `${seconds}s` : `${seconds / 60}m`}
-              </button>
-            ))}
-          </div>
-          <p className="text-slate-500 text-sm">
-            Hoe vaak sensor data wordt vernieuwd (simulatie)
-          </p>
-        </div>
-
-        {/* History points */}
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <label className="text-slate-300 font-medium">
-              Grafiek Datapunten
-            </label>
-            <span className="text-slate-400 font-bold">
-              {settings.historyPoints}
-            </span>
-          </div>
-          <div className="grid grid-cols-3 gap-2">
-            {[30, 60, 120].map((points) => (
-              <button
-                key={points}
-                onClick={() => updateSetting("historyPoints", points)}
-                className={`px-3 py-2 rounded-lg font-medium transition-colors ${
-                  settings.historyPoints === points
-                    ? "bg-blue-600 text-white"
-                    : "bg-slate-700 text-slate-300 hover:bg-slate-600"
-                }`}
-              >
-                {points}
-              </button>
-            ))}
-          </div>
-          <p className="text-slate-500 text-sm">
-            Aantal historische datapunten in grafieken
-          </p>
-        </div>
-
-        {/* Incident list length */}
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <label className="text-slate-300 font-medium">
-              Incident Geschiedenis
-            </label>
-            <span className="text-slate-400 font-bold">
-              {settings.incidentListLength}
-            </span>
-          </div>
-          <div className="grid grid-cols-4 gap-2">
-            {[10, 20, 50, 100].map((length) => (
-              <button
-                key={length}
-                onClick={() => updateSetting("incidentListLength", length)}
-                className={`px-3 py-2 rounded-lg font-medium transition-colors ${
-                  settings.incidentListLength === length
-                    ? "bg-blue-600 text-white"
-                    : "bg-slate-700 text-slate-300 hover:bg-slate-600"
-                }`}
-              >
-                {length}
-              </button>
-            ))}
-          </div>
-          <p className="text-slate-500 text-sm">
-            Maximum aantal incidents in het logboek
-          </p>
-        </div>
-
-        {/* Color theme (preview voor toekomstige feature) */}
-        <div className="space-y-3">
-          <label className="text-slate-300 font-medium">Kleurthema</label>
-          <div className="grid grid-cols-4 gap-2">
-            {(["blue", "purple", "green", "red"] as const).map((theme) => (
-              <button
-                key={theme}
-                onClick={() => updateSetting("colorTheme", theme)}
-                className={`px-3 py-2 rounded-lg font-medium transition-colors capitalize ${
-                  settings.colorTheme === theme
-                    ? `bg-${theme}-600 text-white`
-                    : "bg-slate-700 text-slate-300 hover:bg-slate-600"
-                } ${
-                  theme === "blue"
-                    ? "bg-blue-600"
-                    : theme === "purple"
-                    ? "bg-purple-600"
-                    : theme === "green"
-                    ? "bg-green-600"
-                    : "bg-red-600"
-                }`}
-              >
-                {theme}
-              </button>
-            ))}
-          </div>
-          <p className="text-slate-500 text-sm">
-            Accent kleur voor het dashboard (experimenteel)
-          </p>
-        </div>
-      </div>
-
       {/* Action Buttons */}
       <div className="flex gap-4">
         <button
@@ -506,9 +329,9 @@ export function SettingsPage({
           <div>💡</div>
           <div>
             <strong className="text-slate-300">Tip:</strong> Alle instellingen
-            worden lokaal opgeslagen in je browser. Bij gebruik van Supabase
-            database kunnen instellingen in de toekomst gesynchroniseerd worden
-            tussen apparaten.
+            worden automatisch opgeslagen {isSupabaseEnabled ? 
+            "in je browser én gesynchroniseerd met de Supabase database voor gebruik op meerdere apparaten" : 
+            "in je browser. Verbind Supabase om settings te synchroniseren tussen apparaten"}.
           </div>
         </div>
       </div>

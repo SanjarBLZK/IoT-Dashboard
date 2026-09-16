@@ -32,8 +32,7 @@ function App() {
   // Laad bestaande incidents bij opstarten (indien Supabase geconfigureerd)
   useEffect(() => {
     const loadIncidents = async () => {
-      const maxIncidents = settings.incidentListLength;
-      const existingIncidents = await incidentService.getRecentIncidents(maxIncidents);
+      const existingIncidents = await incidentService.getRecentIncidents(20);
       if (existingIncidents && existingIncidents.length > 0) {
         setIncidents(existingIncidents);
         // Update ID ref naar het hoogste ID + 1
@@ -53,26 +52,25 @@ function App() {
         if (prev.some(i => i.id === newIncident.id)) {
           return prev;
         }
-        const maxLength = settings.incidentListLength;
-        return [newIncident, ...prev.slice(0, maxLength - 1)];
+        return [newIncident, ...prev.slice(0, 19)];
       });
     });
 
     return () => {
       if (unsubscribe) unsubscribe();
     };
-  }, [settings.incidentListLength]);
+  }, []);
 
-  // Update sensor data op basis van instellingen interval
+  // Update sensor data op basis van instellingen interval (elke minuut)
   useEffect(() => {
     const interval = setInterval(() => {
       setRacks((prevRacks) =>
         prevRacks.map((rack) => updateRackWithNewReading(rack, settings.warnTemp, settings.criticalTemp))
       );
-    }, settings.updateInterval * 1000); // Convert seconden naar milliseconden
+    }, 60000); // 1 minuut
 
     return () => clearInterval(interval);
-  }, [settings.updateInterval, settings.warnTemp, settings.criticalTemp]);
+  }, [settings.warnTemp, settings.criticalTemp]);
 
   // Check voor kritieke temperaturen en speel alarm
   useEffect(() => {
@@ -88,8 +86,7 @@ function App() {
           rack.id,
           rack.name
         );
-        const maxLength = settings.incidentListLength;
-        setIncidents((prev) => [alarm, ...prev.slice(0, maxLength - 1)]);
+        setIncidents((prev) => [alarm, ...prev.slice(0, 19)]);
         
         // Speel alarm geluid indien ingeschakeld
         if (settings.audioEnabled) {
@@ -112,7 +109,7 @@ function App() {
     });
 
     previousCriticalRacks.current = criticalRackIds;
-  }, [racks, settings.audioEnabled, settings.alarmVolume, settings.incidentListLength]);
+  }, [racks, settings.audioEnabled, settings.alarmVolume]);
 
   // Simuleer bewegingsdetectie (random tussen 45-90 seconden)
   useEffect(() => {
@@ -133,9 +130,8 @@ function App() {
   const triggerMotionDetection = async () => {
     const motion = createMotionIncident(incidentIdRef.current++);
     
-    // Voeg toe aan lokale state
-    const maxLength = settings.incidentListLength;
-    setIncidents((prev) => [motion, ...prev.slice(0, maxLength - 1)]); // Max op basis van settings
+    // Voeg toe aan lokale state (max 20 incidents)
+    setIncidents((prev) => [motion, ...prev.slice(0, 19)]);
     
     // Speel notificatie geluid indien ingeschakeld
     if (settings.notificationEnabled) {
