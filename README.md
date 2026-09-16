@@ -9,15 +9,34 @@ Een real-time monitoring dashboard voor serverruimte temperatuur, luchtvochtighe
 
 ## 🚀 Features
 
+### ✅ Geïmplementeerd
+
+**Prototype Mode (Zonder Database):**
+- Real-time monitoring van temperatuur en luchtvochtigheid
+- Camera bewegingsdetectie met foto's
+- Lokale incident logging (verdwijnt bij reload)
+- Audio alerts en notificaties
+- Interactieve grafieken en visualisaties
+
+**Database Mode (Met Supabase):** ⭐ **NIEUW**
+- **Camera detecties permanent opgeslagen** 
+- **Incident geschiedenis blijft bewaard**
+- **Real-time synchronisatie tussen apparaten**
+- **Temperatuur alarms opgeslagen in database**
+- **Foto URLs bewaard bij bewegingsdetectie**
+- Automatische backup en schaalbaarheid
+
+> 📖 **Setup**: Zie `CAMERA_SUPABASE_SETUP.md` voor 15-minuten Supabase integratie
+
 ### ✅ Geïmplementeerd (Prototype)
 - **Real-time Monitoring**: Temperatuur en luchtvochtigheid per server rack
 - **Visuele / Bewegingsdetectie (Camera)**:
   - 📷 Live camera feed van serverruimte
   - Automatische fotoregistratie bij bewegingsdetectie
-  - Foto's worden opgeslagen in het incidentenlogboek
+  - **Foto's worden opgeslagen in Supabase database** ⭐
   - Camera hoeft niet per se een high-end professionele camera te zijn
   - Visuele feedback bij bewegingsdetectie (rood overlay + alarm)
-  - Test-functionaliteit voor ontwikkeling/demo doeleinden
+  - **Incident geschiedenis blijft bewaard** ⭐
 - **Visuele Indicatoren**: 
   - Status dots (OK/Waarschuwing/Kritiek) met glow effecten
   - Circulaire temperatuur gauges (270° SVG arc)
@@ -36,10 +55,13 @@ Een real-time monitoring dashboard voor serverruimte temperatuur, luchtvochtighe
   - Browser-based audio (Web Audio API)
 - **Incident Logging**:
   - Bewegingsdetectie met automatische foto opslag
+  - **Incidents worden opgeslagen in Supabase database** ⭐
+  - **Real-time synchronisatie tussen apparaten** ⭐
   - Foto preview met klik-om-te-vergroten functionaliteit
   - Temperatuur alarm registratie
   - Tijdstempel per incident
   - Locatie informatie (Noordzijde, Centrale rij, etc.)
+  - **Incident geschiedenis blijft bewaard na reload** ⭐
 - **Modal Details**: 
   - Volledige rack informatie
   - Temperature/humidity trends
@@ -72,6 +94,8 @@ Een real-time monitoring dashboard voor serverruimte temperatuur, luchtvochtighe
 
 ## 📦 Installatie
 
+### Quick Start (Lokaal, Zonder Database)
+
 ```powershell
 # 1. Clone repository
 cd c:\Users\gorya\IoT-Dashboard-1
@@ -88,8 +112,33 @@ npm install
 npm run dev
 
 # 5. Open browser
-# Browser opent automatisch op http://localhost:3000
+# Browser opent automatisch op http://localhost:5173
 ```
+
+> ⚠️ **Let op**: Zonder database verdwijnen incidents bij reload
+
+### Met Database (Aanbevolen voor Productie)
+
+Voor permanente opslag van camera detecties:
+
+```powershell
+# 1-3. Volg stappen hierboven eerst
+
+# 4. Setup Supabase (15 minuten)
+# Zie: CAMERA_SUPABASE_SETUP.md voor gedetailleerde instructies
+
+# Kort:
+# - Maak Supabase account op https://supabase.com
+# - Run supabase_schema.sql in SQL Editor
+# - Kopieer .env.example naar .env
+# - Vul VITE_SUPABASE_URL en VITE_SUPABASE_ANON_KEY in
+# - Herstart: npm run dev
+
+# 5. Verificatie
+# Check console voor: "📚 X incidents geladen uit Supabase"
+```
+
+📖 **Gedetailleerde instructies**: `CAMERA_SUPABASE_SETUP.md`
 
 ### 📸 Serverruimte Foto Setup
 
