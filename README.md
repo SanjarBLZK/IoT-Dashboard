@@ -418,3 +418,7 @@ const { racks } = useSupabaseData() // Echte data + real-time!
 Alle code voor deze migratie staat in de documentatie files! 🚀
 
 ---
+ALS de changes niet werken:
+
+1 Stop de container: docker-compose down
+2 Rebuild met nieuwe code: docker-compose up -d --build

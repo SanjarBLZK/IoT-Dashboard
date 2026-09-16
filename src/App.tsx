@@ -149,8 +149,8 @@ function App() {
 
   return (
     <BrowserRouter>
-      <div className="min-h-screen bg-slate-950 text-slate-100 p-6">
-        <div className="max-w-7xl mx-auto">
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex items-start justify-center p-6">
+        <div className="w-full max-w-5xl">
           <Navigation />
 
           <Routes>

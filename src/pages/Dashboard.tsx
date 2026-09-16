@@ -2,7 +2,6 @@ import { useState } from "react";
 import { Rack } from "../types";
 import { RackCard } from "../components/RackCard";
 import { RackDetail } from "../components/RackDetail";
-import { CameraView } from "../components/CameraView";
 import {
   LineChart,
   Line,
@@ -83,14 +82,6 @@ export function Dashboard({
             />
           ))}
         </div>
-      </section>
-
-      {/* Camera View Section */}
-      <section>
-        <h2 className="text-2xl font-semibold mb-4 text-slate-100">
-          Visuele Monitoring
-        </h2>
-        <CameraView isMonitoring={true} />
       </section>
 
       {/* Comparison Chart */}
