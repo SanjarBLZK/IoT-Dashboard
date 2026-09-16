@@ -24,7 +24,7 @@ Stap-voor-stap checklist om van simulatie naar echte Supabase backend te gaan.
 - ✅ racks (3 rows)
 - ✅ sensor_data (180+ rows)
 - ✅ devices (13 rows)
-- ✅ incidents (1+ rows)
+- ✅ incidents (1+ rows met foto URLs voor motion events)
 - ✅ settings (3 rows)
 
 ---

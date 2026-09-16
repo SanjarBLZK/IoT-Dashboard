@@ -11,7 +11,18 @@ Een real-time monitoring dashboard voor serverruimte temperatuur, luchtvochtighe
 
 ### ✅ Geïmplementeerd (Prototype)
 - **Real-time Monitoring**: Temperatuur en luchtvochtigheid per server rack
+- **Visuele / Bewegingsdetectie (Camera)**:
+  - 📷 Live camera feed van serverruimte
+  - Automatische fotoregistratie bij bewegingsdetectie
+  - Foto's worden opgeslagen in het incidentenlogboek
+  - Camera hoeft niet per se een high-end professionele camera te zijn
+  - Visuele feedback bij bewegingsdetectie (rood overlay + alarm)
+  - Test-functionaliteit voor ontwikkeling/demo doeleinden
 - **Visuele Indicatoren**: 
+  - Status dots (OK/Waarschuwing/Kritiek) met glow effecten
+  - Circulaire temperatuur gauges (270° SVG arc)
+  - Progress bars voor luchtvochtigheid
+- **Interactieve Grafieken**: 
   - Status dots (OK/Waarschuwing/Kritiek) met glow effecten
   - Circulaire temperatuur gauges (270° SVG arc)
   - Progress bars voor luchtvochtigheid
@@ -24,9 +35,11 @@ Een real-time monitoring dashboard voor serverruimte temperatuur, luchtvochtighe
   - Visuele banner met dismiss functie
   - Browser-based audio (Web Audio API)
 - **Incident Logging**:
-  - Bewegingsdetectie met foto preview
+  - Bewegingsdetectie met automatische foto opslag
+  - Foto preview met klik-om-te-vergroten functionaliteit
   - Temperatuur alarm registratie
   - Tijdstempel per incident
+  - Locatie informatie (Noordzijde, Centrale rij, etc.)
 - **Modal Details**: 
   - Volledige rack informatie
   - Temperature/humidity trends
@@ -61,17 +74,40 @@ Een real-time monitoring dashboard voor serverruimte temperatuur, luchtvochtighe
 
 ```powershell
 # 1. Clone repository
-cd c:\Users\sanja\OneDrive\Documenten\IoT-Dashboard
+cd c:\Users\gorya\IoT-Dashboard-1
 
 # 2. Installeer dependencies
 npm install
 
-# 3. Start development server
+# 3. Voeg je serverruimte foto toe
+# Plaats serverroom.jpg in de public/ folder
+# De foto die je hebt geüpload moet hier komen:
+# c:\Users\gorya\IoT-Dashboard-1\public\serverroom.jpg
+
+# 4. Start development server
 npm run dev
 
-# 4. Open browser
+# 5. Open browser
 # Browser opent automatisch op http://localhost:3000
 ```
+
+### 📸 Serverruimte Foto Setup
+
+**Belangrijk**: De camera functionaliteit gebruikt jouw eigen serverruimte foto.
+
+1. Sla de foto op als: `serverroom.jpg`
+2. Plaats het in: `public/serverroom.jpg`
+3. De foto wordt automatisch gebruikt voor:
+   - Camera live feed
+   - Bewegingsdetectie incident foto's
+
+**Optioneel**: Voor variatie in incident foto's, voeg meerdere foto's toe:
+- `public/serverroom.jpg` (verplicht)
+- `public/serverroom-2.jpg` (optioneel)
+- `public/serverroom-3.jpg` (optioneel)
+- `public/serverroom-4.jpg` (optioneel)
+
+Als je meerdere foto's toevoegt, update dan `src/utils/simulation.ts` om deze te gebruiken.
 
 ## 🎯 Gebruik
 
@@ -93,7 +129,8 @@ IoT-Dashboard/
 │   │   ├── TempArc.tsx      # Temperatuur gauge (SVG)
 │   │   ├── RackCard.tsx     # Rack overview kaart
 │   │   ├── RackDetail.tsx   # Detail modal
-│   │   └── IncidentList.tsx # Incident log
+│   │   ├── CameraView.tsx   # Camera feed met bewegingsdetectie
+│   │   └── IncidentList.tsx # Incident log met foto's
 │   ├── utils/               # Utilities
 │   │   ├── simulation.ts    # Data simulatie helpers
 │   │   └── audio.ts         # Audio alert systeem
@@ -119,6 +156,13 @@ IoT-Dashboard/
 ### Audio Alerts
 - **Kritiek Alarm**: 3x beep @ 880Hz (square wave)
 - **Beweging**: Enkele beep @ 1200Hz (sine wave)
+
+### Camera Monitoring
+- **Live Feed**: Real-time beeld van serverruimte
+- **Bewegingsdetectie**: Automatisch triggeren bij beweging
+- **Foto Opslag**: Elke beweging wordt gefotografeerd en opgeslagen
+- **Camera Info**: CAM-01 identificatie met timestamp overlay
+- **Status Monitoring**: Actief/Offline indicator met resolutie info
 
 ### Responsiveness
 - Mobile-first design

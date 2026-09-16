@@ -62,9 +62,7 @@ function App() {
     const scheduleMotion = () => {
       const delay = randomBetween(45000, 90000, 0); // 45-90 seconden
       const timer = setTimeout(() => {
-        const motion = createMotionIncident(incidentIdRef.current++);
-        setIncidents((prev) => [motion, ...prev.slice(0, 19)]); // Max 20 incidents
-        playNotificationSound();
+        triggerMotionDetection();
         scheduleMotion(); // Plan volgende
       }, delay);
       return timer;
@@ -73,6 +71,13 @@ function App() {
     const timer = scheduleMotion();
     return () => clearTimeout(timer);
   }, []);
+
+  // Handler voor bewegingsdetectie (kan ook manueel worden getriggerd via camera button)
+  const triggerMotionDetection = () => {
+    const motion = createMotionIncident(incidentIdRef.current++);
+    setIncidents((prev) => [motion, ...prev.slice(0, 19)]); // Max 20 incidents
+    playNotificationSound();
+  };
 
   // Check of er kritieke status is
   const hasCritical = racks.some((r) => r.status === "critical");

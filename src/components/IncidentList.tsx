@@ -92,8 +92,10 @@ export function IncidentList({ incidents }: IncidentListProps) {
               <div className="flex-shrink-0">
                 <img
                   src={incident.photo}
-                  alt="Bewegingsdetectie"
-                  className="w-24 h-24 rounded-lg object-cover border border-slate-600"
+                  alt="Bewegingsdetectie foto"
+                  className="w-32 h-24 rounded-lg object-cover border-2 border-amber-500/40 shadow-lg hover:scale-105 transition-transform cursor-pointer"
+                  onClick={() => window.open(incident.photo, '_blank')}
+                  title="Klik om foto te vergroten"
                 />
               </div>
             )}

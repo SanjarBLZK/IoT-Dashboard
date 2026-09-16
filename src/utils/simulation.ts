@@ -108,11 +108,13 @@ export function createInitialRacks(): Rack[] {
   ];
 }
 
-// Sample foto's voor bewegingsdetectie
+// Sample foto's voor bewegingsdetectie (serverruimte beelden)
+// Gebruik lokale foto in plaats van externe URLs
 export const samplePhotos = [
-  "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=400&h=400&fit=crop",
-  "https://images.unsplash.com/photo-1544197150-b99a580bb7a8?w=400&h=400&fit=crop",
-  "https://images.unsplash.com/photo-1551808525-51a94da548ce?w=400&h=400&fit=crop",
+  "/serverroom.jpg", // Jouw serverruimte foto
+  "/serverroom.jpg", // Gebruik dezelfde foto voor consistentie
+  "/serverroom.jpg", // Of voeg serverroom-2.jpg, serverroom-3.jpg toe voor variatie
+  "/serverroom.jpg",
 ];
 
 // Update rack met nieuwe sensor reading
@@ -137,13 +139,21 @@ export function updateRackWithNewReading(rack: Rack): Rack {
   };
 }
 
-// Genereer random motion incident
+// Genereer random motion incident met foto
 export function createMotionIncident(id: number): Incident {
+  const locations = [
+    "Noordzijde serverruimte",
+    "Centrale rij",
+    "Zuidzijde serverruimte",
+    "Ingang serverruimte",
+  ];
+  const randomLocation = locations[Math.floor(Math.random() * locations.length)];
+  
   return {
     id,
     time: formatDateTime(new Date()),
     type: "motion",
-    message: "Beweging gedetecteerd in serverruimte",
+    message: `Beweging gedetecteerd: ${randomLocation} - Foto automatisch opgeslagen`,
     photo: samplePhotos[Math.floor(Math.random() * samplePhotos.length)],
   };
 }
