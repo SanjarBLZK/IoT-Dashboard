@@ -1,4 +1,5 @@
-version: '3.8'
+# Docker Compose configuration for IoT Dashboard
+# Note: 'version' is obsolete in Docker Compose v2+
 
 services:
   iot-dashboard:
