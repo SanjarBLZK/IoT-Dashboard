@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  iot-dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: iot-dashboard
+    ports:
+      - "3000:80"
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+    networks:
+      - iot-network
+
+networks:
+  iot-network:
+    driver: bridge
