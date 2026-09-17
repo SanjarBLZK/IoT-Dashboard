@@ -20,6 +20,14 @@ export function SettingsPage({
   
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
   const [resetConfirm, setResetConfirm] = useState(false);
+  const [showLiveUpdate, setShowLiveUpdate] = useState(false);
+
+  // Toon live update feedback wanneer drempelwaarden veranderen
+  const handleThresholdChange = (key: "warnTemp" | "criticalTemp", value: number) => {
+    updateSetting(key, value);
+    setShowLiveUpdate(true);
+    setTimeout(() => setShowLiveUpdate(false), 2000);
+  };
 
   const handleSave = () => {
     setSaveStatus("saving");
@@ -107,6 +115,16 @@ export function SettingsPage({
         </div>
       )}
 
+      {/* Live Update Banner */}
+      {showLiveUpdate && (
+        <div className="bg-cyan-600/20 border border-cyan-500/50 rounded-lg p-4 flex items-center gap-3 animate-pulse">
+          <div className="text-2xl">⚡</div>
+          <div className="text-cyan-100 font-medium">
+            Drempelwaarden direct toegepast! Check het dashboard voor wijzigingen.
+          </div>
+        </div>
+      )}
+
       {/* 1. Temperatuur Drempelwaarden */}
       <div className="bg-slate-800/40 border border-slate-700/50 rounded-xl p-6 space-y-6">
         <div className="flex items-center gap-3 mb-4">
@@ -132,7 +150,7 @@ export function SettingsPage({
             max="40"
             step="0.5"
             value={settings.warnTemp}
-            onChange={(e) => updateSetting("warnTemp", parseFloat(e.target.value))}
+            onChange={(e) => handleThresholdChange("warnTemp", parseFloat(e.target.value))}
             className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-orange-500"
           />
           <p className="text-slate-500 text-sm">
@@ -156,7 +174,7 @@ export function SettingsPage({
             max="45"
             step="0.5"
             value={settings.criticalTemp}
-            onChange={(e) => updateSetting("criticalTemp", parseFloat(e.target.value))}
+            onChange={(e) => handleThresholdChange("criticalTemp", parseFloat(e.target.value))}
             className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-red-500"
           />
           <p className="text-slate-500 text-sm">
