@@ -1,31 +1,35 @@
 import { supabase, isSupabaseEnabled } from '../lib/supabaseClient'
-import { Incident } from '../types'
+import { Incident, IncidentType } from '../types'
 
 /**
- * Service voor het opslaan en ophalen van incidents
- * Werkt met of zonder Supabase configuratie
+ * Service voor het opslaan en ophalen van incidents.
+ *
+ * Werkt met of zonder Supabase configuratie. Mapping tussen database rijen
+ * en het frontend `Incident` type:
+ *   incidents.id            -> Incident.id
+ *   incidents.timestamp     -> Incident.time (gelokaliseerde string)
+ *   incidents.type          -> Incident.type ('beweging' | 'geluid' | 'temperatuur')
+ *   incidents.description   -> Incident.description
+ *   incidents.image_path    -> Incident.imagePath
  */
 export const incidentService = {
   /**
-   * Sla een nieuw incident op in Supabase
-   * Returns: true als succesvol, false als gefaald
+   * Sla een nieuw incident op in Supabase.
+   * Returns: true als succesvol, false als gefaald.
    */
   async saveIncident(incident: Omit<Incident, 'id'>): Promise<boolean> {
-    // Check of Supabase is geconfigureerd
     if (!isSupabaseEnabled()) {
       console.log('📝 Supabase niet geconfigureerd - incident alleen lokaal opgeslagen')
       return false
     }
 
     try {
-      // Map frontend incident type naar database format
       const { data, error } = await supabase!
         .from('incidents')
         .insert({
           type: incident.type,
-          rack_id: incident.rack || null,
-          message: incident.message,
-          photo_url: incident.photo || null,
+          description: incident.description,
+          image_path: incident.imagePath ?? null,
           timestamp: new Date().toISOString(),
         })
         .select()
@@ -44,8 +48,8 @@ export const incidentService = {
   },
 
   /**
-   * Haal recente incidents op uit Supabase
-   * Returns: Array van incidents, of null als gefaald
+   * Haal recente incidents op uit Supabase.
+   * Returns: Array van incidents, of null als gefaald.
    */
   async getRecentIncidents(limit: number = 20): Promise<Incident[] | null> {
     if (!isSupabaseEnabled()) {
@@ -64,14 +68,12 @@ export const incidentService = {
         return null
       }
 
-      // Map database format naar frontend format
-      return data.map((item) => ({
-        id: item.id,
-        time: new Date(item.timestamp).toLocaleString('nl-NL'),
-        type: item.type as 'motion' | 'alarm' | 'resolved',
-        rack: item.rack_id || undefined,
-        message: item.message,
-        photo: item.photo_url || undefined,
+      return data.map((row) => ({
+        id: row.id,
+        time: new Date(row.timestamp).toLocaleString('nl-NL'),
+        type: row.type as IncidentType,
+        description: row.description,
+        imagePath: row.image_path ?? undefined,
       }))
     } catch (err) {
       console.error('❌ Onverwachte fout bij ophalen incidents:', err)
@@ -80,8 +82,8 @@ export const incidentService = {
   },
 
   /**
-   * Subscribe to real-time incident updates
-   * Returns: Unsubscribe function
+   * Subscribe naar real-time incident updates.
+   * Returns: unsubscribe functie.
    */
   subscribeToIncidents(
     callback: (incident: Incident) => void
@@ -100,20 +102,24 @@ export const incidentService = {
           table: 'incidents',
         },
         (payload) => {
-          const newIncident = payload.new
+          const row = payload.new as {
+            id: number
+            timestamp: string
+            type: IncidentType
+            description: string
+            image_path: string | null
+          }
           callback({
-            id: newIncident.id,
-            time: new Date(newIncident.timestamp).toLocaleString('nl-NL'),
-            type: newIncident.type,
-            rack: newIncident.rack_id || undefined,
-            message: newIncident.message,
-            photo: newIncident.photo_url || undefined,
+            id: row.id,
+            time: new Date(row.timestamp).toLocaleString('nl-NL'),
+            type: row.type,
+            description: row.description,
+            imagePath: row.image_path ?? undefined,
           })
         }
       )
       .subscribe()
 
-    // Return unsubscribe function
     return () => {
       supabase!.removeChannel(channel)
     }

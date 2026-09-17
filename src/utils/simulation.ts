@@ -1,4 +1,11 @@
-import { Rack, RackReading, RackStatus, Incident } from "../types";
+import { Rack, RackReading, RackStatus, Incident, RackThresholds } from "../types";
+
+// Marge (in °C) waarbinnen een temperatuur als "warn" wordt gemarkeerd
+// voordat hij de kritische drempel raakt.
+const WARN_MARGIN_C = 3;
+
+// Marge (in %) voor luchtvochtigheid.
+const HUMIDITY_WARN_MARGIN = 5;
 
 // Helper: Random waarde binnen range
 export function randomBetween(min: number, max: number, decimals = 1): number {
@@ -6,10 +13,33 @@ export function randomBetween(min: number, max: number, decimals = 1): number {
   return Number(value.toFixed(decimals));
 }
 
-// Status afleiden van temperatuur
-export function deriveStatus(temp: number, warnTemp: number = 28, criticalTemp: number = 35): RackStatus {
-  if (temp >= criticalTemp) return "critical";
-  if (temp >= warnTemp) return "warn";
+/**
+ * Bepaal de rack-status op basis van temperatuur, luchtvochtigheid en de
+ * per-rack drempelwaarden uit de `settings` tabel.
+ *
+ * - critical  : temp >= high OR temp <= low  OR humidity > humidityThreshold
+ * - warn      : temp binnen `WARN_MARGIN_C` van high/low, of humidity
+ *               binnen `HUMIDITY_WARN_MARGIN` van humidityThreshold
+ * - ok        : alle waardes ruim binnen de drempels
+ */
+export function deriveStatus(
+  temp: number,
+  humidity: number,
+  thresholds: Pick<RackThresholds, "tempThresholdHigh" | "tempThresholdLow" | "humidityThreshold">
+): RackStatus {
+  const { tempThresholdHigh, tempThresholdLow, humidityThreshold } = thresholds;
+
+  if (temp >= tempThresholdHigh || temp <= tempThresholdLow) return "critical";
+  if (humidity > humidityThreshold) return "critical";
+
+  if (
+    temp >= tempThresholdHigh - WARN_MARGIN_C ||
+    temp <= tempThresholdLow + WARN_MARGIN_C ||
+    humidity > humidityThreshold - HUMIDITY_WARN_MARGIN
+  ) {
+    return "warn";
+  }
+
   return "ok";
 }
 
@@ -53,7 +83,7 @@ export function generateHistoricalData(
   return history;
 }
 
-// Initiële rack data
+// Initiële rack data (client-side model; racks staan niet meer in de database)
 export function createInitialRacks(): Rack[] {
   return [
     {
@@ -79,7 +109,7 @@ export function createInitialRacks(): Rack[] {
       type: "network",
       temp: 29.2,
       humidity: 52,
-      status: "warn",
+      status: "ok",
       history: generateHistoricalData(29.2, 52),
       devices: [
         "Cisco Nexus 9000",
@@ -109,24 +139,22 @@ export function createInitialRacks(): Rack[] {
 }
 
 // Sample foto's voor bewegingsdetectie (serverruimte beelden)
-// Gebruik lokale foto in plaats van externe URLs
 export const samplePhotos = [
-  "/serverroom.jpg", // Jouw serverruimte foto
-  "/serverroom.jpg", // Gebruik dezelfde foto voor consistentie
-  "/serverroom.jpg", // Of voeg serverroom-2.jpg, serverroom-3.jpg toe voor variatie
+  "/serverroom.jpg",
+  "/serverroom.jpg",
+  "/serverroom.jpg",
   "/serverroom.jpg",
 ];
 
-// Update rack met nieuwe sensor reading
+// Update rack met nieuwe sensor reading, aan de hand van de rack-specifieke drempelwaardes.
 export function updateRackWithNewReading(
-  rack: Rack, 
-  warnTemp: number = 28, 
-  criticalTemp: number = 35
+  rack: Rack,
+  thresholds: Pick<RackThresholds, "tempThresholdHigh" | "tempThresholdLow" | "humidityThreshold">
 ): Rack {
   const drift = randomBetween(-0.4, 0.4);
   const newTemp = Number((rack.temp + drift).toFixed(1));
   const newHumidity = Number((rack.humidity + randomBetween(-0.3, 0.3)).toFixed(1));
-  const newStatus = deriveStatus(newTemp, warnTemp, criticalTemp);
+  const newStatus = deriveStatus(newTemp, newHumidity, thresholds);
 
   const newReading: RackReading = {
     time: formatTime(new Date()),
@@ -143,7 +171,7 @@ export function updateRackWithNewReading(
   };
 }
 
-// Genereer random motion incident met foto
+// Genereer random motion incident met foto (type: 'beweging')
 export function createMotionIncident(id: number): Incident {
   const locations = [
     "Noordzijde serverruimte",
@@ -152,23 +180,22 @@ export function createMotionIncident(id: number): Incident {
     "Ingang serverruimte",
   ];
   const randomLocation = locations[Math.floor(Math.random() * locations.length)];
-  
+
   return {
     id,
     time: formatDateTime(new Date()),
-    type: "motion",
-    message: `Beweging gedetecteerd: ${randomLocation} - Foto automatisch opgeslagen`,
-    photo: samplePhotos[Math.floor(Math.random() * samplePhotos.length)],
+    type: "beweging",
+    description: `Beweging gedetecteerd: ${randomLocation} - Foto automatisch opgeslagen`,
+    imagePath: samplePhotos[Math.floor(Math.random() * samplePhotos.length)],
   };
 }
 
-// Genereer temperature alarm incident
-export function createTemperatureAlarm(id: number, rackId: number, rackName: string): Incident {
+// Genereer temperature alarm incident (type: 'temperatuur')
+export function createTemperatureAlarm(id: number, rackName: string): Incident {
   return {
     id,
     time: formatDateTime(new Date()),
-    type: "alarm",
-    rack: rackId,
-    message: `Kritieke temperatuur gedetecteerd in ${rackName}`,
+    type: "temperatuur",
+    description: `Kritieke temperatuur gedetecteerd in ${rackName}`,
   };
 }

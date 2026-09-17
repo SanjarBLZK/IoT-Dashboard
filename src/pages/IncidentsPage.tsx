@@ -20,10 +20,10 @@ export function IncidentsPage({
   onAlertDismiss,
   playAlertBeep,
 }: IncidentsPageProps) {
-  // Filter incidents by type
-  const criticalIncidents = incidents.filter((i) => i.type === "alarm");
-  const motionIncidents = incidents.filter((i) => i.type === "motion");
-  const resolvedIncidents = incidents.filter((i) => i.type === "resolved");
+  // Aggregatie per incident type (matcht de DB CHECK-constraint).
+  const motionIncidents = incidents.filter((i) => i.type === "beweging");
+  const soundIncidents = incidents.filter((i) => i.type === "geluid");
+  const tempIncidents = incidents.filter((i) => i.type === "temperatuur");
 
   return (
     <div className="space-y-6">
@@ -69,20 +69,6 @@ export function IncidentsPage({
           </div>
         </div>
 
-        <div className="bg-slate-800/40 border border-red-500/40 rounded-xl p-4">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-red-500/20 rounded-lg flex items-center justify-center text-2xl">
-              🚨
-            </div>
-            <div>
-              <div className="text-slate-400 text-sm">Alarmen</div>
-              <div className="text-2xl font-bold text-red-400">
-                {criticalIncidents.length}
-              </div>
-            </div>
-          </div>
-        </div>
-
         <div className="bg-slate-800/40 border border-amber-500/40 rounded-xl p-4">
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 bg-amber-500/20 rounded-lg flex items-center justify-center text-2xl">
@@ -97,15 +83,29 @@ export function IncidentsPage({
           </div>
         </div>
 
-        <div className="bg-slate-800/40 border border-emerald-500/40 rounded-xl p-4">
+        <div className="bg-slate-800/40 border border-sky-500/40 rounded-xl p-4">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-emerald-500/20 rounded-lg flex items-center justify-center text-2xl">
-              ✅
+            <div className="w-12 h-12 bg-sky-500/20 rounded-lg flex items-center justify-center text-2xl">
+              🔊
             </div>
             <div>
-              <div className="text-slate-400 text-sm">Opgelost</div>
-              <div className="text-2xl font-bold text-emerald-400">
-                {resolvedIncidents.length}
+              <div className="text-slate-400 text-sm">Geluid</div>
+              <div className="text-2xl font-bold text-sky-400">
+                {soundIncidents.length}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-slate-800/40 border border-red-500/40 rounded-xl p-4">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 bg-red-500/20 rounded-lg flex items-center justify-center text-2xl">
+              🚨
+            </div>
+            <div>
+              <div className="text-slate-400 text-sm">Temperatuur</div>
+              <div className="text-2xl font-bold text-red-400">
+                {tempIncidents.length}
               </div>
             </div>
           </div>
@@ -119,9 +119,10 @@ export function IncidentsPage({
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {racks.map((rack) => {
-            const typeBadge = rack.type === "server" 
-              ? { bg: "bg-blue-500/20", text: "text-blue-400", icon: "🖥️", label: "Server" }
-              : { bg: "bg-purple-500/20", text: "text-purple-400", icon: "🌐", label: "Netwerk" };
+            const typeBadge =
+              rack.type === "server"
+                ? { bg: "bg-blue-500/20", text: "text-blue-400", icon: "🖥️", label: "Server" }
+                : { bg: "bg-purple-500/20", text: "text-purple-400", icon: "🌐", label: "Netwerk" };
 
             return (
               <div
@@ -140,7 +141,9 @@ export function IncidentsPage({
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
                     <h3 className="font-semibold text-slate-100">{rack.name}</h3>
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${typeBadge.bg} ${typeBadge.text} flex items-center gap-1`}>
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-xs font-medium ${typeBadge.bg} ${typeBadge.text} flex items-center gap-1`}
+                    >
                       <span>{typeBadge.icon}</span>
                       <span>{typeBadge.label}</span>
                     </span>

@@ -7,7 +7,7 @@ import { IncidentsPage } from "./pages/IncidentsPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { playAlertBeep, playNotificationSound } from "./utils/audio";
 import { incidentService } from "./services/incidentService";
-import { useSettings } from "./hooks/useSettings";
+import { useSettings, DEFAULT_THRESHOLDS } from "./hooks/useSettings";
 import {
   createInitialRacks,
   updateRackWithNewReading,
@@ -17,8 +17,8 @@ import {
 } from "./utils/simulation";
 
 function App() {
-  // Settings hook
-  const { settings } = useSettings();
+  // Settings hook (per-rack thresholds + lokale audio voorkeuren)
+  const { rackThresholds, audio } = useSettings();
 
   // State
   const [racks, setRacks] = useState<Rack[]>(createInitialRacks());
@@ -35,8 +35,7 @@ function App() {
       const existingIncidents = await incidentService.getRecentIncidents(20);
       if (existingIncidents && existingIncidents.length > 0) {
         setIncidents(existingIncidents);
-        // Update ID ref naar het hoogste ID + 1
-        const maxId = Math.max(...existingIncidents.map(i => i.id));
+        const maxId = Math.max(...existingIncidents.map((i) => i.id));
         incidentIdRef.current = maxId + 1;
         console.log(`📚 ${existingIncidents.length} incidents geladen uit Supabase`);
       }
@@ -44,14 +43,11 @@ function App() {
 
     loadIncidents();
 
-    // Subscribe to real-time incident updates from other sources
+    // Subscribe to real-time incident updates
     const unsubscribe = incidentService.subscribeToIncidents((newIncident) => {
-      console.log('🔔 Nieuw incident ontvangen via real-time:', newIncident);
+      console.log("🔔 Nieuw incident ontvangen via real-time:", newIncident);
       setIncidents((prev) => {
-        // Check if incident already exists (prevent duplicates)
-        if (prev.some(i => i.id === newIncident.id)) {
-          return prev;
-        }
+        if (prev.some((i) => i.id === newIncident.id)) return prev;
         return [newIncident, ...prev.slice(0, 19)];
       });
     });
@@ -61,93 +57,86 @@ function App() {
     };
   }, []);
 
-  // Update sensor data op basis van instellingen interval (elke minuut)
+  // Update sensor data elke minuut, per-rack met eigen thresholds.
   useEffect(() => {
     const interval = setInterval(() => {
       setRacks((prevRacks) =>
-        prevRacks.map((rack) => updateRackWithNewReading(rack, settings.warnTemp, settings.criticalTemp))
+        prevRacks.map((rack) => {
+          const th = rackThresholds[rack.id] ?? { rackId: rack.id, ...DEFAULT_THRESHOLDS };
+          return updateRackWithNewReading(rack, th);
+        })
       );
-    }, 60000); // 1 minuut
+    }, 60000);
 
     return () => clearInterval(interval);
-  }, [settings.warnTemp, settings.criticalTemp]);
+  }, [rackThresholds]);
 
   // Check voor kritieke temperaturen en speel alarm
   useEffect(() => {
     const criticalRacks = racks.filter((r) => r.status === "critical");
     const criticalRackIds = new Set(criticalRacks.map((r) => r.id));
 
-    // Check voor nieuwe kritieke racks
     criticalRacks.forEach(async (rack) => {
       if (!previousCriticalRacks.current.has(rack.id)) {
-        // Nieuwe kritieke rack gedetecteerd
-        const alarm = createTemperatureAlarm(
-          incidentIdRef.current++,
-          rack.id,
-          rack.name
-        );
+        const alarm = createTemperatureAlarm(incidentIdRef.current++, rack.name);
         setIncidents((prev) => [alarm, ...prev.slice(0, 19)]);
-        
-        // Speel alarm geluid indien ingeschakeld
-        if (settings.audioEnabled) {
-          playAlertBeep(settings.alarmVolume);
+
+        if (audio.audioEnabled) {
+          playAlertBeep(audio.alarmVolume);
         }
         setAlertDismissed(false);
-        
-        // Sla op in Supabase
+
         const saved = await incidentService.saveIncident({
           time: alarm.time,
           type: alarm.type,
-          rack: alarm.rack,
-          message: alarm.message,
+          description: alarm.description,
+          imagePath: alarm.imagePath,
         });
-        
+
         if (saved) {
-          console.log('🚨 Temperatuur alarm opgeslagen in Supabase database');
+          console.log("🚨 Temperatuur alarm opgeslagen in Supabase database");
         }
       }
     });
 
     previousCriticalRacks.current = criticalRackIds;
-  }, [racks, settings.audioEnabled, settings.alarmVolume]);
+  }, [racks, audio.audioEnabled, audio.alarmVolume]);
 
   // Simuleer bewegingsdetectie (random tussen 45-90 seconden)
   useEffect(() => {
     const scheduleMotion = () => {
-      const delay = randomBetween(45000, 90000, 0); // 45-90 seconden
+      const delay = randomBetween(45000, 90000, 0);
       const timer = setTimeout(() => {
         triggerMotionDetection();
-        scheduleMotion(); // Plan volgende
+        scheduleMotion();
       }, delay);
       return timer;
     };
 
     const timer = scheduleMotion();
     return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Handler voor bewegingsdetectie (kan ook manueel worden getriggerd via camera button)
+  // Handler voor bewegingsdetectie
   const triggerMotionDetection = async () => {
     const motion = createMotionIncident(incidentIdRef.current++);
-    
-    // Voeg toe aan lokale state (max 20 incidents)
+
     setIncidents((prev) => [motion, ...prev.slice(0, 19)]);
-    
-    // Speel notificatie geluid indien ingeschakeld
-    if (settings.notificationEnabled) {
-      playNotificationSound(settings.notificationVolume);
+
+    if (audio.notificationEnabled) {
+      playNotificationSound(audio.notificationVolume);
     }
-    
-    // Sla op in Supabase (als geconfigureerd)
+
     const saved = await incidentService.saveIncident({
       time: motion.time,
       type: motion.type,
-      message: motion.message,
-      photo: motion.photo,
+      description: motion.description,
+      imagePath: motion.imagePath,
     });
-    
+
     if (saved) {
-      console.log('📷 Camera detectie opgeslagen in Supabase database');
+      console.log("📷 Camera detectie opgeslagen in Supabase database");
     }
   };
 

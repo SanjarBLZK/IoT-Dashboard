@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useSettings } from "../hooks/useSettings";
+import { useSettings, RACK_IDS, DEFAULT_THRESHOLDS } from "../hooks/useSettings";
 
 interface SettingsPageProps {
   hasCritical: boolean;
@@ -9,6 +9,13 @@ interface SettingsPageProps {
   playAlertBeep: () => void;
 }
 
+// Display labels voor rack IDs (racks staan niet in de database).
+const RACK_LABELS: Record<number, { name: string; location: string }> = {
+  1: { name: "Rack A", location: "Noordzijde" },
+  2: { name: "Rack B", location: "Centrale rij" },
+  3: { name: "Rack C", location: "Zuidzijde" },
+};
+
 export function SettingsPage({
   hasCritical,
   criticalRackNames,
@@ -16,12 +23,22 @@ export function SettingsPage({
   onAlertDismiss,
   playAlertBeep,
 }: SettingsPageProps) {
-  const { settings, updateSetting, resetSettings, syncStatus, isSupabaseEnabled } = useSettings();
-  
+  const {
+    rackThresholds,
+    audio,
+    updateRackThreshold,
+    updateAudio,
+    resetAll,
+    syncStatus,
+    isSupabaseEnabled,
+  } = useSettings();
+
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
   const [resetConfirm, setResetConfirm] = useState(false);
 
   const handleSave = () => {
+    // Wijzigingen worden al automatisch weggeschreven; deze knop toont enkel
+    // een bevestiging.
     setSaveStatus("saving");
     setTimeout(() => {
       setSaveStatus("saved");
@@ -31,7 +48,7 @@ export function SettingsPage({
 
   const handleReset = async () => {
     if (resetConfirm) {
-      await resetSettings();
+      await resetAll();
       setResetConfirm(false);
       setSaveStatus("saved");
       setTimeout(() => setSaveStatus("idle"), 2000);
@@ -42,7 +59,7 @@ export function SettingsPage({
   };
 
   const handleTestAlarm = () => {
-    if (settings.audioEnabled) {
+    if (audio.audioEnabled) {
       playAlertBeep();
     }
   };
@@ -75,18 +92,23 @@ export function SettingsPage({
           <h1 className="text-3xl font-bold text-slate-100">Instellingen</h1>
         </div>
         <p className="text-slate-400">
-          Pas het dashboard aan naar jouw voorkeuren
+          Configureer drempelwaarden per rack en audio voorkeuren.
         </p>
-        
+
         {/* Supabase Status Indicator */}
         {isSupabaseEnabled && (
           <div className="mt-4 flex items-center gap-2">
-            <div className={`w-2 h-2 rounded-full ${
-              syncStatus === "syncing" ? "bg-yellow-500 animate-pulse" :
-              syncStatus === "synced" ? "bg-green-500" :
-              syncStatus === "error" ? "bg-red-500" :
-              "bg-slate-600"
-            }`} />
+            <div
+              className={`w-2 h-2 rounded-full ${
+                syncStatus === "syncing"
+                  ? "bg-yellow-500 animate-pulse"
+                  : syncStatus === "synced"
+                  ? "bg-green-500"
+                  : syncStatus === "error"
+                  ? "bg-red-500"
+                  : "bg-slate-600"
+              }`}
+            />
             <span className="text-xs text-slate-400">
               {syncStatus === "syncing" && "Synchroniseren met server..."}
               {syncStatus === "synced" && "✅ Gesynchroniseerd met server"}
@@ -107,73 +129,132 @@ export function SettingsPage({
         </div>
       )}
 
-      {/* 1. Temperatuur Drempelwaarden */}
+      {/* 1. Drempelwaarden per Rack */}
       <div className="bg-slate-800/40 border border-slate-700/50 rounded-xl p-6 space-y-6">
-        <div className="flex items-center gap-3 mb-4">
+        <div className="flex items-center gap-3 mb-2">
           <div className="text-2xl">🌡️</div>
           <h2 className="text-xl font-bold text-slate-100">
-            Temperatuur Drempelwaarden
+            Drempelwaarden per Rack
           </h2>
         </div>
+        <p className="text-sm text-slate-400 -mt-4">
+          Deze waardes worden opgeslagen in de <code>settings</code> tabel.
+        </p>
 
-        {/* Waarschuwingstemperatuur */}
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <label className="text-slate-300 font-medium">
-              Waarschuwingstemperatuur
-            </label>
-            <span className="text-orange-400 font-bold text-lg">
-              {settings.warnTemp}°C
-            </span>
-          </div>
-          <input
-            type="range"
-            min="20"
-            max="40"
-            step="0.5"
-            value={settings.warnTemp}
-            onChange={(e) => updateSetting("warnTemp", parseFloat(e.target.value))}
-            className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-orange-500"
-          />
-          <p className="text-slate-500 text-sm">
-            Bij deze temperatuur wordt een oranje waarschuwing getoond
-          </p>
-        </div>
+        {RACK_IDS.map((rackId) => {
+          const t = rackThresholds[rackId] ?? { rackId, ...DEFAULT_THRESHOLDS };
+          const label = RACK_LABELS[rackId] ?? { name: `Rack ${rackId}`, location: "" };
 
-        {/* Kritieke temperatuur */}
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <label className="text-slate-300 font-medium">
-              Kritieke temperatuur
-            </label>
-            <span className="text-red-400 font-bold text-lg">
-              {settings.criticalTemp}°C
-            </span>
-          </div>
-          <input
-            type="range"
-            min="25"
-            max="45"
-            step="0.5"
-            value={settings.criticalTemp}
-            onChange={(e) => updateSetting("criticalTemp", parseFloat(e.target.value))}
-            className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-red-500"
-          />
-          <p className="text-slate-500 text-sm">
-            Bij deze temperatuur wordt een rode kritieke alert getriggerd met alarm
-          </p>
-        </div>
+          return (
+            <div
+              key={rackId}
+              className="bg-slate-900/40 border border-slate-700/40 rounded-lg p-4 space-y-5"
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-slate-100 font-semibold">
+                    {label.name}
+                  </div>
+                  {label.location && (
+                    <div className="text-xs text-slate-500">{label.location}</div>
+                  )}
+                </div>
+                <div className="text-xs text-slate-500 font-mono">
+                  rack_id = {rackId}
+                </div>
+              </div>
 
-        {/* Info box */}
-        <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3">
-          <div className="flex items-start gap-2">
-            <div className="text-blue-400 text-lg">ℹ️</div>
-            <div className="text-xs text-blue-200">
-              <strong>Let op:</strong> Zorg dat de kritieke temperatuur hoger is
-              dan de waarschuwingstemperatuur voor correcte werking.
+              {/* Maximale temperatuur */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-slate-300 font-medium text-sm">
+                    Maximale temperatuur (alarm)
+                  </label>
+                  <span className="text-red-400 font-bold">
+                    {t.tempThresholdHigh.toFixed(1)}°C
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min="20"
+                  max="50"
+                  step="0.5"
+                  value={t.tempThresholdHigh}
+                  onChange={(e) =>
+                    updateRackThreshold(
+                      rackId,
+                      "tempThresholdHigh",
+                      parseFloat(e.target.value)
+                    )
+                  }
+                  className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-red-500"
+                />
+              </div>
+
+              {/* Minimale temperatuur */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-slate-300 font-medium text-sm">
+                    Minimale temperatuur (alarm)
+                  </label>
+                  <span className="text-sky-400 font-bold">
+                    {t.tempThresholdLow.toFixed(1)}°C
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="25"
+                  step="0.5"
+                  value={t.tempThresholdLow}
+                  onChange={(e) =>
+                    updateRackThreshold(
+                      rackId,
+                      "tempThresholdLow",
+                      parseFloat(e.target.value)
+                    )
+                  }
+                  className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-sky-500"
+                />
+              </div>
+
+              {/* Luchtvochtigheidsdrempel */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-slate-300 font-medium text-sm">
+                    Luchtvochtigheidsdrempel
+                  </label>
+                  <span className="text-cyan-400 font-bold">
+                    {t.humidityThreshold.toFixed(0)}%
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min="20"
+                  max="90"
+                  step="1"
+                  value={t.humidityThreshold}
+                  onChange={(e) =>
+                    updateRackThreshold(
+                      rackId,
+                      "humidityThreshold",
+                      parseFloat(e.target.value)
+                    )
+                  }
+                  className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-cyan-500"
+                />
+              </div>
+
+              {/* Validatie hint */}
+              {t.tempThresholdHigh <= t.tempThresholdLow && (
+                <div className="text-xs text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded p-2">
+                  ⚠️ Maximale temperatuur moet hoger zijn dan minimale
+                  temperatuur.
+                </div>
+              )}
             </div>
-          </div>
-        </div>
+          );
+        })}
       </div>
 
       {/* 2. Audio Instellingen */}
@@ -182,6 +263,9 @@ export function SettingsPage({
           <div className="text-2xl">🔊</div>
           <h2 className="text-xl font-bold text-slate-100">Audio Instellingen</h2>
         </div>
+        <p className="text-xs text-slate-500 -mt-4">
+          Audio voorkeuren staan lokaal per apparaat opgeslagen (niet in de database).
+        </p>
 
         {/* Audio aan/uit */}
         <div className="flex items-center justify-between">
@@ -192,33 +276,33 @@ export function SettingsPage({
             </p>
           </div>
           <button
-            onClick={() => updateSetting("audioEnabled", !settings.audioEnabled)}
+            onClick={() => updateAudio("audioEnabled", !audio.audioEnabled)}
             className={`relative w-14 h-8 rounded-full transition-colors ${
-              settings.audioEnabled ? "bg-green-600" : "bg-slate-600"
+              audio.audioEnabled ? "bg-green-600" : "bg-slate-600"
             }`}
           >
             <div
               className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full transition-transform ${
-                settings.audioEnabled ? "translate-x-6" : ""
+                audio.audioEnabled ? "translate-x-6" : ""
               }`}
             />
           </button>
         </div>
 
         {/* Alarm volume */}
-        {settings.audioEnabled && (
+        {audio.audioEnabled && (
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <label className="text-slate-300 font-medium">Alarm Volume</label>
-              <span className="text-slate-400 font-bold">{settings.alarmVolume}%</span>
+              <span className="text-slate-400 font-bold">{audio.alarmVolume}%</span>
             </div>
             <input
               type="range"
               min="0"
               max="100"
               step="5"
-              value={settings.alarmVolume}
-              onChange={(e) => updateSetting("alarmVolume", parseInt(e.target.value))}
+              value={audio.alarmVolume}
+              onChange={(e) => updateAudio("alarmVolume", parseInt(e.target.value))}
               className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-red-500"
             />
           </div>
@@ -236,29 +320,29 @@ export function SettingsPage({
           </div>
           <button
             onClick={() =>
-              updateSetting("notificationEnabled", !settings.notificationEnabled)
+              updateAudio("notificationEnabled", !audio.notificationEnabled)
             }
             className={`relative w-14 h-8 rounded-full transition-colors ${
-              settings.notificationEnabled ? "bg-green-600" : "bg-slate-600"
+              audio.notificationEnabled ? "bg-green-600" : "bg-slate-600"
             }`}
           >
             <div
               className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full transition-transform ${
-                settings.notificationEnabled ? "translate-x-6" : ""
+                audio.notificationEnabled ? "translate-x-6" : ""
               }`}
             />
           </button>
         </div>
 
         {/* Notificatie volume */}
-        {settings.notificationEnabled && (
+        {audio.notificationEnabled && (
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <label className="text-slate-300 font-medium">
                 Notificatie Volume
               </label>
               <span className="text-slate-400 font-bold">
-                {settings.notificationVolume}%
+                {audio.notificationVolume}%
               </span>
             </div>
             <input
@@ -266,9 +350,9 @@ export function SettingsPage({
               min="0"
               max="100"
               step="5"
-              value={settings.notificationVolume}
+              value={audio.notificationVolume}
               onChange={(e) =>
-                updateSetting("notificationVolume", parseInt(e.target.value))
+                updateAudio("notificationVolume", parseInt(e.target.value))
               }
               className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
             />
@@ -278,7 +362,7 @@ export function SettingsPage({
         {/* Test alarm button */}
         <button
           onClick={handleTestAlarm}
-          disabled={!settings.audioEnabled}
+          disabled={!audio.audioEnabled}
           className="w-full px-4 py-3 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 disabled:text-slate-600 rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
         >
           <span>🔔</span>
@@ -328,10 +412,12 @@ export function SettingsPage({
         <div className="flex items-start gap-2 text-sm text-slate-400">
           <div>💡</div>
           <div>
-            <strong className="text-slate-300">Tip:</strong> Alle instellingen
-            worden automatisch opgeslagen {isSupabaseEnabled ? 
-            "in je browser én gesynchroniseerd met de Supabase database voor gebruik op meerdere apparaten" : 
-            "in je browser. Verbind Supabase om settings te synchroniseren tussen apparaten"}.
+            <strong className="text-slate-300">Tip:</strong> Rack drempelwaarden
+            worden{" "}
+            {isSupabaseEnabled
+              ? "automatisch gesynchroniseerd met de Supabase database"
+              : "lokaal in je browser opgeslagen. Verbind Supabase om waardes te delen tussen apparaten"}
+            .
           </div>
         </div>
       </div>

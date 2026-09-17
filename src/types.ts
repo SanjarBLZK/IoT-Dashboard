@@ -1,4 +1,4 @@
-// Status van een rack op basis van temperatuur
+// Status van een rack op basis van sensormetingen
 export type RackStatus = "ok" | "warn" | "critical";
 
 // Enkele sensor meting op een tijdstip
@@ -11,7 +11,7 @@ export interface RackReading {
 // Rack types
 export type RackType = "server" | "network";
 
-// Server rack met alle eigenschappen
+// Server rack met alle eigenschappen (client-side model; racks komen niet meer uit de database)
 export interface Rack {
   id: number;                    // Uniek ID (1, 2, 3)
   name: string;                  // "Rack A", "Rack B", "Rack C"
@@ -24,12 +24,31 @@ export interface Rack {
   devices: string[];             // Apparaten in dit rack
 }
 
-// Incident types
+// Incident types komen overeen met de database CHECK-constraint
+// op incidents.type: 'beweging' | 'geluid' | 'temperatuur'.
+export type IncidentType = "beweging" | "geluid" | "temperatuur";
+
+// Incident model dat één-op-één matcht met de `incidents` tabel.
 export interface Incident {
   id: number;
-  time: string;
-  type: "motion" | "alarm" | "resolved";
-  rack?: number;                 // Optioneel: welke rack
-  message: string;
-  photo?: string;                // URL naar foto (bij bewegingsdetectie)
+  time: string;                  // Weergavevorm van timestamp
+  type: IncidentType;
+  description: string;           // incidents.description
+  imagePath?: string;            // incidents.image_path (optioneel)
+}
+
+// Drempelwaarden per rack (matcht de `settings` tabel).
+export interface RackThresholds {
+  rackId: number;                // settings.rack_id
+  tempThresholdHigh: number;     // settings.temp_threshold_high
+  tempThresholdLow: number;      // settings.temp_threshold_low
+  humidityThreshold: number;     // settings.humidity_threshold
+}
+
+// Audio voorkeuren (lokaal per apparaat; niet in de database).
+export interface AudioPreferences {
+  audioEnabled: boolean;
+  alarmVolume: number;           // 0-100
+  notificationEnabled: boolean;
+  notificationVolume: number;    // 0-100
 }
