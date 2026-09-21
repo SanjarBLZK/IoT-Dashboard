@@ -59,14 +59,14 @@ CREATE TABLE incidents (
 );
 
 -- users
---   Gebruikers van het dashboard.
+--   Gebruikers van het dashboard. Geen rollen: elk account is gelijk.
+--   `last_login` houdt bij welke accounts hebben ingelogd en wanneer.
 CREATE TABLE users (
   id            SERIAL PRIMARY KEY,
   username      VARCHAR(64) NOT NULL UNIQUE,
   password_hash VARCHAR(255) NOT NULL,
-  role          VARCHAR(32) NOT NULL
-                CHECK (role IN ('beheerder', 'docent', 'developer')),
-  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  last_login    TIMESTAMPTZ
 );
 
 -- settings
@@ -161,11 +161,7 @@ INSERT INTO settings (rack_id, temp_threshold_high, temp_threshold_low, humidity
   (2, 35.0, 15.0, 60.0),
   (3, 35.0, 15.0, 60.0);
 
--- Standaard gebruikers (password_hash is placeholder; vervang in productie).
-INSERT INTO users (username, password_hash, role) VALUES
-  ('admin',    'REPLACE_WITH_BCRYPT_HASH', 'beheerder'),
-  ('docent',   'REPLACE_WITH_BCRYPT_HASH', 'docent'),
-  ('dev',      'REPLACE_WITH_BCRYPT_HASH', 'developer');
+-- Geen seed-users: accounts worden aangemaakt via het inlog-/registratiescherm.
 
 -- Historische sensor data (laatste 30 minuten, 60 metingen per rack).
 INSERT INTO sensor_data (rack_id, temperature, humidity, timestamp)

@@ -52,3 +52,11 @@ export interface AudioPreferences {
   notificationEnabled: boolean;
   notificationVolume: number;    // 0-100
 }
+
+// Ingelogde gebruiker (matcht de `users` tabel, zonder password_hash).
+export interface AuthUser {
+  id: number;                    // users.id
+  username: string;              // users.username
+  createdAt: string;             // users.created_at (ISO)
+  lastLogin: string | null;      // users.last_login (ISO) of null
+}

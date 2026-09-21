@@ -5,9 +5,11 @@ import { Navigation } from "./components/Navigation";
 import { Dashboard } from "./pages/Dashboard";
 import { IncidentsPage } from "./pages/IncidentsPage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { LoginPage } from "./pages/LoginPage";
 import { playAlertBeep, playNotificationSound } from "./utils/audio";
 import { incidentService } from "./services/incidentService";
 import { useSettings, DEFAULT_THRESHOLDS } from "./hooks/useSettings";
+import { AuthProvider, useAuth } from "./hooks/useAuth";
 import {
   createInitialRacks,
   updateRackWithNewReading,
@@ -17,7 +19,53 @@ import {
   randomBetween,
 } from "./utils/simulation";
 
+/**
+ * App root: zet de auth context op en laat AuthGate bepalen wat er getoond
+ * wordt. De router staat er buiten zodat ook het inlogscherm routes kan
+ * gebruiken indien nodig.
+ */
 function App() {
+  return (
+    <BrowserRouter>
+      <AuthProvider>
+        <AuthGate />
+      </AuthProvider>
+    </BrowserRouter>
+  );
+}
+
+/**
+ * Bepaalt of het dashboard of het inlogscherm getoond wordt.
+ * Het monitoring-gedeelte wordt pas gemount na een succesvolle login, zodat
+ * de sensor-simulatie en alarmen niet op de achtergrond draaien terwijl
+ * niemand is ingelogd.
+ */
+function AuthGate() {
+  const { user, isLoading } = useAuth();
+
+  // Korte laadstaat tijdens het herstellen van een opgeslagen sessie.
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 border-4 border-slate-700 border-t-cyan-500 rounded-full animate-spin" />
+          <p className="text-sm text-slate-400">Sessie controleren...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <LoginPage />;
+  }
+
+  return <MonitoringApp />;
+}
+
+/**
+ * Het eigenlijke dashboard. Draait alleen wanneer er een gebruiker is ingelogd.
+ */
+function MonitoringApp() {
   // Settings hook (per-rack thresholds + lokale audio voorkeuren)
   const { rackThresholds, audio } = useSettings();
 
@@ -73,14 +121,18 @@ function App() {
   }, [rackThresholds]);
 
   // Herbereken rack status direct wanneer drempelwaarden veranderen
+  // (per-rack: sensor_data-gedreven thresholds uit de `settings` tabel).
   useEffect(() => {
     setRacks((prevRacks) =>
-      prevRacks.map((rack) => ({
-        ...rack,
-        status: deriveStatus(rack.temp, settings.warnTemp, settings.criticalTemp),
-      }))
+      prevRacks.map((rack) => {
+        const th = rackThresholds[rack.id] ?? { rackId: rack.id, ...DEFAULT_THRESHOLDS };
+        return {
+          ...rack,
+          status: deriveStatus(rack.temp, rack.humidity, th),
+        };
+      })
     );
-  }, [settings.warnTemp, settings.criticalTemp]);
+  }, [rackThresholds]);
 
   // Check voor kritieke temperaturen en speel alarm
   useEffect(() => {
@@ -159,55 +211,53 @@ function App() {
     .join(", ");
 
   return (
-    <BrowserRouter>
-      <div className="min-h-screen bg-slate-950 text-slate-100 flex items-start justify-center p-6">
-        <div className="w-full max-w-5xl">
-          <Navigation />
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex items-start justify-center p-6">
+      <div className="w-full max-w-5xl">
+        <Navigation />
 
-          <Routes>
-            <Route
-              path="/"
-              element={
-                <Dashboard
-                  racks={racks}
-                  hasCritical={hasCritical}
-                  criticalRackNames={criticalRackNames}
-                  alertDismissed={alertDismissed}
-                  onAlertDismiss={() => setAlertDismissed(true)}
-                  playAlertBeep={playAlertBeep}
-                />
-              }
-            />
-            <Route
-              path="/incidents"
-              element={
-                <IncidentsPage
-                  incidents={incidents}
-                  racks={racks}
-                  hasCritical={hasCritical}
-                  criticalRackNames={criticalRackNames}
-                  alertDismissed={alertDismissed}
-                  onAlertDismiss={() => setAlertDismissed(true)}
-                  playAlertBeep={playAlertBeep}
-                />
-              }
-            />
-            <Route
-              path="/settings"
-              element={
-                <SettingsPage
-                  hasCritical={hasCritical}
-                  criticalRackNames={criticalRackNames}
-                  alertDismissed={alertDismissed}
-                  onAlertDismiss={() => setAlertDismissed(true)}
-                  playAlertBeep={playAlertBeep}
-                />
-              }
-            />
-          </Routes>
-        </div>
+        <Routes>
+          <Route
+            path="/"
+            element={
+              <Dashboard
+                racks={racks}
+                hasCritical={hasCritical}
+                criticalRackNames={criticalRackNames}
+                alertDismissed={alertDismissed}
+                onAlertDismiss={() => setAlertDismissed(true)}
+                playAlertBeep={playAlertBeep}
+              />
+            }
+          />
+          <Route
+            path="/incidents"
+            element={
+              <IncidentsPage
+                incidents={incidents}
+                racks={racks}
+                hasCritical={hasCritical}
+                criticalRackNames={criticalRackNames}
+                alertDismissed={alertDismissed}
+                onAlertDismiss={() => setAlertDismissed(true)}
+                playAlertBeep={playAlertBeep}
+              />
+            }
+          />
+          <Route
+            path="/settings"
+            element={
+              <SettingsPage
+                hasCritical={hasCritical}
+                criticalRackNames={criticalRackNames}
+                alertDismissed={alertDismissed}
+                onAlertDismiss={() => setAlertDismissed(true)}
+                playAlertBeep={playAlertBeep}
+              />
+            }
+          />
+        </Routes>
       </div>
-    </BrowserRouter>
+    </div>
   );
 }
 
