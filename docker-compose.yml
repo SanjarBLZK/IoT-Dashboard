@@ -5,6 +5,12 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        # Wordt gelezen uit het .env bestand naast dit compose-bestand.
+        # Verplicht: zonder deze twee bakt de build een niet-werkende
+        # Supabase client in en zie je "Geen verbinding met de database".
+        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
+        VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
     container_name: iot-dashboard
     ports:
       - "3002:80"
