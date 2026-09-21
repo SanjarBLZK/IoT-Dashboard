@@ -11,6 +11,7 @@ import { useSettings, DEFAULT_THRESHOLDS } from "./hooks/useSettings";
 import {
   createInitialRacks,
   updateRackWithNewReading,
+  deriveStatus,
   createMotionIncident,
   createTemperatureAlarm,
   randomBetween,
@@ -70,6 +71,16 @@ function App() {
 
     return () => clearInterval(interval);
   }, [rackThresholds]);
+
+  // Herbereken rack status direct wanneer drempelwaarden veranderen
+  useEffect(() => {
+    setRacks((prevRacks) =>
+      prevRacks.map((rack) => ({
+        ...rack,
+        status: deriveStatus(rack.temp, settings.warnTemp, settings.criticalTemp),
+      }))
+    );
+  }, [settings.warnTemp, settings.criticalTemp]);
 
   // Check voor kritieke temperaturen en speel alarm
   useEffect(() => {

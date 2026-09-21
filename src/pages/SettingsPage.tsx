@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useSettings, RACK_IDS, DEFAULT_THRESHOLDS } from "../hooks/useSettings";
+import { RackThresholds } from "../types";
 
 interface SettingsPageProps {
   hasCritical: boolean;
@@ -35,6 +36,18 @@ export function SettingsPage({
 
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
   const [resetConfirm, setResetConfirm] = useState(false);
+  const [showLiveUpdate, setShowLiveUpdate] = useState(false);
+
+  // Wrapt updateRackThreshold met een korte "Live update" bevestiging.
+  const handleThresholdChange = <K extends keyof Omit<RackThresholds, "rackId">>(
+    rackId: number,
+    key: K,
+    value: RackThresholds[K]
+  ) => {
+    updateRackThreshold(rackId, key, value);
+    setShowLiveUpdate(true);
+    setTimeout(() => setShowLiveUpdate(false), 2000);
+  };
 
   const handleSave = () => {
     // Wijzigingen worden al automatisch weggeschreven; deze knop toont enkel
@@ -129,6 +142,16 @@ export function SettingsPage({
         </div>
       )}
 
+      {/* Live Update Banner */}
+      {showLiveUpdate && (
+        <div className="bg-cyan-600/20 border border-cyan-500/50 rounded-lg p-4 flex items-center gap-3 animate-pulse">
+          <div className="text-2xl">⚡</div>
+          <div className="text-cyan-100 font-medium">
+            Drempelwaarden direct toegepast! Check het dashboard voor wijzigingen.
+          </div>
+        </div>
+      )}
+
       {/* 1. Drempelwaarden per Rack */}
       <div className="bg-slate-800/40 border border-slate-700/50 rounded-xl p-6 space-y-6">
         <div className="flex items-center gap-3 mb-2">
@@ -181,7 +204,7 @@ export function SettingsPage({
                   step="0.5"
                   value={t.tempThresholdHigh}
                   onChange={(e) =>
-                    updateRackThreshold(
+                    handleThresholdChange(
                       rackId,
                       "tempThresholdHigh",
                       parseFloat(e.target.value)
@@ -208,7 +231,7 @@ export function SettingsPage({
                   step="0.5"
                   value={t.tempThresholdLow}
                   onChange={(e) =>
-                    updateRackThreshold(
+                    handleThresholdChange(
                       rackId,
                       "tempThresholdLow",
                       parseFloat(e.target.value)
@@ -235,7 +258,7 @@ export function SettingsPage({
                   step="1"
                   value={t.humidityThreshold}
                   onChange={(e) =>
-                    updateRackThreshold(
+                    handleThresholdChange(
                       rackId,
                       "humidityThreshold",
                       parseFloat(e.target.value)
