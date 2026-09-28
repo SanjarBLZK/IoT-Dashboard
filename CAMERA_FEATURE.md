@@ -174,11 +174,14 @@ const response = await fetch('/api/camera/snapshot')
 const photoUrl = await response.json()
 ```
 
-3. **Upload foto's** naar storage (Supabase Storage):
+3. **Upload foto's** naar de backend:
 ```typescript
-const { data } = await supabase.storage
-  .from('incident-photos')
-  .upload(`motion-${timestamp}.jpg`, photoFile)
+const form = new FormData()
+form.append('photo', photoFile)
+const { imagePath } = await fetch('/api/incidents/photo', {
+  method: 'POST',
+  body: form,
+}).then((r) => r.json())
 ```
 
 4. **Real-time motion detection**:
@@ -231,7 +234,7 @@ if motion_detected:
 ## 🚀 Next Steps
 
 1. **Backend Integratie**: Vervang simulatie met echte camera API
-2. **Storage Setup**: Configureer Supabase Storage voor foto opslag
+2. **Storage Setup**: Configureer bestandsopslag voor foto's op de backend
 3. **Motion Detection**: Implementeer Python OpenCV backend
 4. **Multiple Cameras**: Uitbreiden naar meerdere camera's (CAM-02, CAM-03)
 5. **Video Recording**: Optie voor video opname bij incident

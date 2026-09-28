@@ -167,7 +167,7 @@ npm run dev
 # 2. Test lokaal: npm run dev
 # 3. Commit naar Git
 git add .
-git commit -m "Added Settings page with Supabase sync"
+git commit -m "Added Settings page"
 
 # 4. Rebuild Docker
 docker-compose down
@@ -245,7 +245,7 @@ docker-compose up -d
 
 ---
 
-**Laatste Update**: Na toevoegen van Settings v2.0 met Supabase sync
+**Laatste Update**: Na toevoegen van de Settings pagina
 
 **Container Info**:
 - Image: `iot-dashboard-1-iot-dashboard`

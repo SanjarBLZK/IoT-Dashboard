@@ -124,7 +124,6 @@ F12 → Console tab
 
 Kijk naar rode error messages:
 - "useSettings is not defined" → Build probleem
-- "Supabase error" → Normaal (geen .env)
 - Andere errors → Stuur screenshot
 ```
 
@@ -142,8 +141,7 @@ Kijk naar rode error messages:
 1. Browser download verse bundle (600KB)
 2. Settings tab verschijnt in navigatie
 3. Klikken → Settings pagina laadt
-4. Console: "📚 X incidents geladen uit Supabase"
-   (Of warning als geen Supabase geconfigureerd)
+4. Console: "📚 X incidents geladen uit lokale opslag"
 ```
 
 ## 📊 Verificatie Commands

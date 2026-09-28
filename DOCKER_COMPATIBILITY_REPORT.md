@@ -21,7 +21,7 @@ Het IoT Dashboard project is **100% compatibel** met Docker en volledig overdraa
 - ✅ **package.json**: Alle dependencies correct gedefinieerd
 - ✅ **Build process**: `npm run build` werkt zonder errors
 - ✅ **Node version**: Compatible (Node 20 in Docker)
-- ✅ **Supabase**: Optioneel, werkt zonder configuratie
+- ✅ **Externe services**: Geen, draait volledig standalone
 
 ### 3. Static Assets
 - ✅ **Public folder**: Alle assets aanwezig (`/public/serverroom.jpg`, `/public/vite.svg`)
@@ -32,12 +32,12 @@ Het IoT Dashboard project is **100% compatibel** met Docker en volledig overdraa
 - ✅ **No hardcoded paths**: Geen C:\ of /Users/ paths gevonden
 - ✅ **No localhost references**: Alles is relatief
 - ✅ **No absolute file paths**: Alle imports zijn relatief
-- ✅ **Environment variables**: Alleen optionele Supabase vars
+- ✅ **Environment variables**: Geen vereist
 
 ### 5. Network & Ports
 - ✅ **Port mapping**: 3000:80 (host:container)
 - ✅ **No external dependencies**: Draait volledig standalone
-- ✅ **Supabase**: Optioneel, geen blocker als het niet geconfigureerd is
+- ✅ **Externe afhankelijkheden**: Geen
 
 ### 6. Cross-Platform Compatibility
 - ✅ **Line endings**: .dockerignore handelt dit af
@@ -116,30 +116,17 @@ git pull
 docker-compose up -d --build
 ```
 
-### Production Deploy (met Supabase)
-```bash
-# 1. Voeg .env bestand toe met Supabase credentials
-echo "VITE_SUPABASE_URL=your-url" >> .env
-echo "VITE_SUPABASE_ANON_KEY=your-key" >> .env
-
-# 2. Update docker-compose.yml om .env te laden
-# (voeg env_file: - .env toe)
-
-# 3. Build en deploy
-docker-compose up -d --build
-```
-
 ---
 
-## 🔧 Environment Variables (Optioneel)
+## 🔧 Environment Variables
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `VITE_SUPABASE_URL` | ❌ No | - | Supabase project URL |
-| `VITE_SUPABASE_ANON_KEY` | ❌ No | - | Supabase anonymous key |
 | `NODE_ENV` | ❌ No | production | Runtime environment |
 
-**Note**: Het dashboard werkt volledig zonder Supabase. Het wordt alleen gebruikt voor optionele database persistentie van incidenten.
+**Note**: Het dashboard heeft geen environment variabelen of API-keys nodig.
+Alles draait in de browser met lokale opslag. Zodra de PostgreSQL backend er
+is, komt hier een variabele bij voor de API-URL.
 
 ---
 
@@ -223,7 +210,7 @@ Het IoT Dashboard project is:
 - ✅ **100% overdraagbaar** naar andere machines
 - ✅ **Productie-ready**
 - ✅ **Platform-onafhankelijk**
-- ✅ **Geen externe dependencies** (behalve optionele Supabase)
+- ✅ **Geen externe dependencies**
 - ✅ **Geoptimaliseerd** (kleine image size, snelle build)
 
 **Je kunt dit project zonder aanpassingen deployen op:**

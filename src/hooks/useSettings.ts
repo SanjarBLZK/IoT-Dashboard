@@ -1,14 +1,17 @@
-import { useState, useEffect, useCallback } from "react";
-import { supabase, isSupabaseEnabled } from "../lib/supabaseClient";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { AudioPreferences, RackThresholds } from "../types";
+import { settingsService } from "../services/settingsService";
+import { RACK_IDS } from "../config/racks";
 
-// ============================================================================
-// Defaults
-// ============================================================================
-
-// Rack IDs die het dashboard hanteert. Alle drie krijgen een default rij in de
-// `settings` tabel via het schema.
-export const RACK_IDS = [1, 2, 3] as const;
+/**
+ * Drempelwaarden komen uit de `settings` tabel en zijn GEDEELD tussen alle
+ * apparaten. Past iemand een waarde aan, dan zien de andere apparaten die
+ * binnen `POLL_INTERVAL_MS`.
+ *
+ * Audio voorkeuren blijven wel lokaal: volume is een eigenschap van het
+ * apparaat waarop je zit, niet van de serverruimte. Ze staan daarom ook niet
+ * in de database.
+ */
 
 export const DEFAULT_THRESHOLDS: Omit<RackThresholds, "rackId"> = {
   tempThresholdHigh: 35.0,
@@ -23,12 +26,12 @@ export const DEFAULT_AUDIO: AudioPreferences = {
   notificationVolume: 10,
 };
 
-const RACK_STORAGE_KEY = "iot-dashboard-rack-thresholds";
 const AUDIO_STORAGE_KEY = "iot-dashboard-audio-preferences";
 
-// ============================================================================
-// Helpers
-// ============================================================================
+// Hoe vaak we controleren of iemand anders de drempelwaarden heeft gewijzigd.
+const POLL_INTERVAL_MS = 10_000;
+
+export type SyncStatus = "idle" | "syncing" | "synced" | "error";
 
 function buildDefaultThresholds(): Record<number, RackThresholds> {
   const result: Record<number, RackThresholds> = {};
@@ -38,190 +41,108 @@ function buildDefaultThresholds(): Record<number, RackThresholds> {
   return result;
 }
 
-function readLocalThresholds(): Record<number, RackThresholds> {
-  try {
-    const raw = localStorage.getItem(RACK_STORAGE_KEY);
-    if (!raw) return buildDefaultThresholds();
-    const parsed = JSON.parse(raw) as Record<number, RackThresholds>;
-    // Merge met defaults zodat ontbrekende racks/velden worden aangevuld.
-    const merged = buildDefaultThresholds();
-    for (const rackId of RACK_IDS) {
-      merged[rackId] = { ...merged[rackId], ...(parsed[rackId] ?? {}) };
-    }
-    return merged;
-  } catch (err) {
-    console.warn("Kon rack thresholds niet lezen uit localStorage:", err);
-    return buildDefaultThresholds();
-  }
-}
-
 function readLocalAudio(): AudioPreferences {
   try {
     const raw = localStorage.getItem(AUDIO_STORAGE_KEY);
     if (!raw) return DEFAULT_AUDIO;
     return { ...DEFAULT_AUDIO, ...(JSON.parse(raw) as Partial<AudioPreferences>) };
   } catch (err) {
-    console.warn("Kon audio voorkeuren niet lezen uit localStorage:", err);
+    console.warn("Kon audio voorkeuren niet lezen:", err);
     return DEFAULT_AUDIO;
   }
 }
 
-// ============================================================================
-// Hook
-// ============================================================================
-
-export type SyncStatus = "idle" | "syncing" | "synced" | "error";
-
-/**
- * `useSettings` levert:
- *  - `rackThresholds`: drempelwaarden per rack (uit Supabase `settings` tabel,
- *    met localStorage als fallback / cache).
- *  - `audio`: audio voorkeuren (uitsluitend lokaal, niet in de database).
- *
- * Wijzigingen worden gedebounced weggeschreven naar Supabase én naar
- * localStorage.
- */
 export function useSettings() {
-  const [rackThresholds, setRackThresholds] = useState<Record<number, RackThresholds>>(
-    () => readLocalThresholds()
-  );
+  const [rackThresholds, setRackThresholds] = useState<
+    Record<number, RackThresholds>
+  >(() => buildDefaultThresholds());
   const [audio, setAudio] = useState<AudioPreferences>(() => readLocalAudio());
 
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>("idle");
-  const [hydrated, setHydrated] = useState(false);
 
-  // -----------------------------
-  // Load: settings uit Supabase
-  // -----------------------------
-  useEffect(() => {
-    let cancelled = false;
+  // Voorkomt dat een poll-resultaat een wijziging overschrijft die de
+  // gebruiker net heeft gedaan maar nog onderweg is naar de server.
+  const pendingWrites = useRef(0);
 
-    const loadFromSupabase = async () => {
-      if (!isSupabaseEnabled()) {
-        setHydrated(true);
-        return;
-      }
-
-      try {
-        setIsLoading(true);
-        const { data, error } = await supabase!
-          .from("settings")
-          .select("rack_id, temp_threshold_high, temp_threshold_low, humidity_threshold")
-          .in("rack_id", RACK_IDS as unknown as number[]);
-
-        if (error) throw error;
-        if (cancelled) return;
-
-        if (data && data.length > 0) {
-          const merged = buildDefaultThresholds();
-          for (const row of data) {
-            merged[row.rack_id] = {
-              rackId: row.rack_id,
-              tempThresholdHigh: Number(row.temp_threshold_high),
-              tempThresholdLow: Number(row.temp_threshold_low),
-              humidityThreshold: Number(row.humidity_threshold),
-            };
-          }
-          setRackThresholds(merged);
-          localStorage.setItem(RACK_STORAGE_KEY, JSON.stringify(merged));
-          console.log("✅ Rack settings geladen uit Supabase");
-        } else {
-          console.log("📋 Geen settings-rijen gevonden in Supabase, defaults in gebruik");
-        }
-      } catch (err) {
-        console.warn("⚠️ Kon settings niet laden van Supabase:", err);
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false);
-          setHydrated(true);
-        }
-      }
-    };
-
-    loadFromSupabase();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  // -----------------------------
-  // Persist: rack thresholds
-  // -----------------------------
-  useEffect(() => {
-    // Skip eerste render totdat we uit Supabase geladen hebben, zodat we niet
-    // per ongeluk defaults over server-waarden heen schrijven.
-    if (!hydrated) return;
+  const refresh = useCallback(async () => {
+    if (pendingWrites.current > 0) return;
 
     try {
-      localStorage.setItem(RACK_STORAGE_KEY, JSON.stringify(rackThresholds));
-    } catch (err) {
-      console.warn("Kon rack thresholds niet opslaan in localStorage:", err);
-    }
-
-    if (!isSupabaseEnabled() || isLoading) return;
-
-    const persist = async () => {
-      try {
-        setSyncStatus("syncing");
-        const rows = Object.values(rackThresholds).map((t) => ({
-          rack_id: t.rackId,
-          temp_threshold_high: t.tempThresholdHigh,
-          temp_threshold_low: t.tempThresholdLow,
-          humidity_threshold: t.humidityThreshold,
-          updated_at: new Date().toISOString(),
-        }));
-
-        const { error } = await supabase!
-          .from("settings")
-          .upsert(rows, { onConflict: "rack_id" });
-
-        if (error) throw error;
-
-        setSyncStatus("synced");
-        console.log("💾 Rack settings opgeslagen naar Supabase");
-        setTimeout(() => setSyncStatus("idle"), 2000);
-      } catch (err) {
-        console.error("❌ Kon rack settings niet opslaan naar Supabase:", err);
-        setSyncStatus("error");
-        setTimeout(() => setSyncStatus("idle"), 3000);
+      const fromServer = await settingsService.getAll();
+      if (Object.keys(fromServer).length > 0) {
+        // Merge met defaults, zodat een rack zonder rij toch een waarde heeft.
+        setRackThresholds({ ...buildDefaultThresholds(), ...fromServer });
       }
+    } catch (err) {
+      console.warn("Kon drempelwaarden niet ophalen:", err);
+    }
+  }, []);
+
+  // Eerste keer laden.
+  useEffect(() => {
+    let active = true;
+
+    (async () => {
+      await refresh();
+      if (active) setIsLoading(false);
+    })();
+
+    return () => {
+      active = false;
     };
+  }, [refresh]);
 
-    // Kleine debounce zodat sliders niet elk frame een write triggeren.
-    const timer = setTimeout(persist, 300);
-    return () => clearTimeout(timer);
-  }, [rackThresholds, hydrated, isLoading]);
+  // Blijven pollen, zodat wijzigingen van andere apparaten binnenkomen.
+  useEffect(() => {
+    const interval = setInterval(refresh, POLL_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [refresh]);
 
-  // -----------------------------
-  // Persist: audio (localStorage only)
-  // -----------------------------
+  // Audio voorkeuren lokaal bewaren.
   useEffect(() => {
     try {
       localStorage.setItem(AUDIO_STORAGE_KEY, JSON.stringify(audio));
     } catch (err) {
-      console.warn("Kon audio voorkeuren niet opslaan in localStorage:", err);
+      console.warn("Kon audio voorkeuren niet opslaan:", err);
     }
   }, [audio]);
 
-  // -----------------------------
-  // Updaters
-  // -----------------------------
+  /**
+   * Werk een drempelwaarde bij. De UI reageert direct (optimistisch), daarna
+   * gaat de wijziging naar de server. Mislukt dat, dan draaien we terug.
+   */
   const updateRackThreshold = useCallback(
-    <K extends keyof Omit<RackThresholds, "rackId">>(
+    async <K extends keyof Omit<RackThresholds, "rackId">>(
       rackId: number,
       key: K,
       value: RackThresholds[K]
     ) => {
-      setRackThresholds((prev) => {
-        const current = prev[rackId] ?? { rackId, ...DEFAULT_THRESHOLDS };
-        return {
-          ...prev,
-          [rackId]: { ...current, [key]: value },
-        };
-      });
+      const current =
+        rackThresholds[rackId] ?? ({ rackId, ...DEFAULT_THRESHOLDS } as RackThresholds);
+      const updated: RackThresholds = { ...current, [key]: value };
+
+      setRackThresholds((prev) => ({ ...prev, [rackId]: updated }));
+
+      pendingWrites.current += 1;
+      setSyncStatus("syncing");
+
+      try {
+        const saved = await settingsService.update(updated);
+        setRackThresholds((prev) => ({ ...prev, [rackId]: saved }));
+        setSyncStatus("synced");
+        setTimeout(() => setSyncStatus("idle"), 2000);
+      } catch (err) {
+        // Terugdraaien: de server heeft de wijziging niet geaccepteerd.
+        setRackThresholds((prev) => ({ ...prev, [rackId]: current }));
+        setSyncStatus("error");
+        console.error("Kon drempelwaarde niet opslaan:", err);
+        setTimeout(() => setSyncStatus("idle"), 3000);
+      } finally {
+        pendingWrites.current -= 1;
+      }
     },
-    []
+    [rackThresholds]
   );
 
   const updateAudio = useCallback(
@@ -231,32 +152,34 @@ export function useSettings() {
     []
   );
 
+  /** Zet alles terug naar de standaardwaarden, ook op de server. */
   const resetAll = useCallback(async () => {
-    const defaults = buildDefaultThresholds();
-    setRackThresholds(defaults);
     setAudio(DEFAULT_AUDIO);
-
     try {
-      localStorage.removeItem(RACK_STORAGE_KEY);
       localStorage.removeItem(AUDIO_STORAGE_KEY);
-    } catch (err) {
-      console.warn("Kon instellingen niet verwijderen uit localStorage:", err);
+    } catch {
+      // niet kritisch
     }
 
-    if (isSupabaseEnabled()) {
-      try {
-        const rows = Object.values(defaults).map((t) => ({
-          rack_id: t.rackId,
-          temp_threshold_high: t.tempThresholdHigh,
-          temp_threshold_low: t.tempThresholdLow,
-          humidity_threshold: t.humidityThreshold,
-          updated_at: new Date().toISOString(),
-        }));
-        await supabase!.from("settings").upsert(rows, { onConflict: "rack_id" });
-        console.log("🔄 Rack settings gereset in Supabase");
-      } catch (err) {
-        console.warn("Kon settings niet resetten in Supabase:", err);
-      }
+    pendingWrites.current += 1;
+    setSyncStatus("syncing");
+
+    try {
+      const defaults = buildDefaultThresholds();
+      await Promise.all(
+        Object.values(defaults).map((thresholds) =>
+          settingsService.update(thresholds)
+        )
+      );
+      setRackThresholds(defaults);
+      setSyncStatus("synced");
+      setTimeout(() => setSyncStatus("idle"), 2000);
+    } catch (err) {
+      console.error("Kon instellingen niet resetten:", err);
+      setSyncStatus("error");
+      setTimeout(() => setSyncStatus("idle"), 3000);
+    } finally {
+      pendingWrites.current -= 1;
     }
   }, []);
 
@@ -268,6 +191,5 @@ export function useSettings() {
     resetAll,
     isLoading,
     syncStatus,
-    isSupabaseEnabled: isSupabaseEnabled(),
   };
 }

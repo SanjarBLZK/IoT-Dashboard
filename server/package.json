@@ -1,0 +1,22 @@
+{
+  "name": "iot-dashboard-api",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Backend API voor het IoT Dashboard (PostgreSQL)",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "bcryptjs": "2.4.3",
+    "cookie-parser": "1.4.6",
+    "express": "4.19.2",
+    "jsonwebtoken": "9.0.2",
+    "pg": "8.11.5"
+  }
+}

@@ -148,23 +148,14 @@ Alarm triggered als critical
 
 ## 💾 Opslag
 
-### Zonder Supabase (Default):
+**Drempelwaarden worden opgeslagen in:**
+- De `settings` tabel in PostgreSQL (één rij per rack)
+- Gedeeld tussen alle apparaten: past iemand iets aan, dan zien de andere
+  apparaten dat binnen 10 seconden
+- Zie `server/src/schema.sql` voor het tabelontwerp
 
-**Settings worden opgeslagen in:**
-- Browser LocalStorage
-- Per apparaat
-- Blijft behouden na reload
-- ❌ Niet gesynchroniseerd tussen apparaten
-
-### Met Supabase (Aanbevolen):
-
-**Settings worden opgeslagen in:**
-- ✅ Supabase database
-- ✅ Gesynchroniseerd tussen alle apparaten
-- ✅ Real-time updates
-- ✅ Backup in cloud
-
-**Setup:** Zie `CAMERA_SUPABASE_SETUP.md`
+**Audio voorkeuren** blijven lokaal per apparaat (volume is een eigenschap van
+het apparaat waarop je zit, niet van de serverruimte).
 
 ## 🎮 Live Testen
 
@@ -224,7 +215,7 @@ Geen manual refresh!
 1. 🔴 Status wordt "critical"
 2. 🚨 Audio alarm speelt (3x beep)
 3. 📝 Incident wordt aangemaakt
-4. 💾 Incident opgeslagen in database (als Supabase)
+4. 💾 Incident opgeslagen in de `incidents` tabel
 5. 🔔 Banner verschijnt bovenaan
 6. ⚠️ Rack kaart kleurt rood
 

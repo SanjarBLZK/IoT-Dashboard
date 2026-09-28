@@ -1,31 +1,40 @@
-import { Rack, RackReading, RackStatus, Incident, RackThresholds } from "../types";
+import { Rack, RackReading, RackStatus, RackThresholds } from "../types";
+import { RACK_CONFIG } from "../config/racks";
+import { ReadingsByRack } from "../services/sensorService";
 
-// Marge (in °C) waarbinnen een temperatuur als "warn" wordt gemarkeerd
-// voordat hij de kritische drempel raakt.
+/**
+ * Weergave-helpers.
+ *
+ * De sensorsimulatie zelf draait op de SERVER (server/src/simulator.js), zodat
+ * alle apparaten dezelfde metingen en incidents zien. Dit bestand rekent de
+ * API-data alleen om naar het model dat de componenten verwachten.
+ */
+
+// Marge (in °C) waarbinnen een temperatuur al als "warn" geldt.
+// Moet gelijk blijven aan de waarde in server/src/simulator.js.
 const WARN_MARGIN_C = 3;
 
 // Marge (in %) voor luchtvochtigheid.
 const HUMIDITY_WARN_MARGIN = 5;
 
-// Helper: Random waarde binnen range
-export function randomBetween(min: number, max: number, decimals = 1): number {
-  const value = Math.random() * (max - min) + min;
-  return Number(value.toFixed(decimals));
-}
+// Aantal metingen dat de grafieken tonen.
+const HISTORY_POINTS = 60;
 
 /**
- * Bepaal de rack-status op basis van temperatuur, luchtvochtigheid en de
- * per-rack drempelwaarden uit de `settings` tabel.
+ * Leid de status af uit een meting en de drempelwaarden van dat rack.
  *
- * - critical  : temp >= high OR temp <= low  OR humidity > humidityThreshold
- * - warn      : temp binnen `WARN_MARGIN_C` van high/low, of humidity
- *               binnen `HUMIDITY_WARN_MARGIN` van humidityThreshold
- * - ok        : alle waardes ruim binnen de drempels
+ * - critical : temp >= high, temp <= low, of humidity > drempel
+ * - warn     : temp binnen WARN_MARGIN_C van een grens, of humidity
+ *              binnen HUMIDITY_WARN_MARGIN van de drempel
+ * - ok       : alles ruim binnen de marges
  */
 export function deriveStatus(
   temp: number,
   humidity: number,
-  thresholds: Pick<RackThresholds, "tempThresholdHigh" | "tempThresholdLow" | "humidityThreshold">
+  thresholds: Pick<
+    RackThresholds,
+    "tempThresholdHigh" | "tempThresholdLow" | "humidityThreshold"
+  >
 ): RackStatus {
   const { tempThresholdHigh, tempThresholdLow, humidityThreshold } = thresholds;
 
@@ -43,7 +52,7 @@ export function deriveStatus(
   return "ok";
 }
 
-// Timestamp formatteren
+/** Tijdstip als HH:MM, voor de x-as van de grafieken. */
 export function formatTime(date: Date): string {
   return date.toLocaleTimeString("nl-NL", {
     hour: "2-digit",
@@ -51,7 +60,7 @@ export function formatTime(date: Date): string {
   });
 }
 
-// Volledige datum/tijd formatteren
+/** Volledige datum en tijd, voor incident-tijdstempels. */
 export function formatDateTime(date: Date): string {
   return date.toLocaleString("nl-NL", {
     day: "2-digit",
@@ -63,139 +72,48 @@ export function formatDateTime(date: Date): string {
   });
 }
 
-// Genereer historische data voor een rack (60 metingen = 60 minuten bij 1 min interval)
-export function generateHistoricalData(
-  baseTemp: number,
-  baseHumidity: number
-): RackReading[] {
-  const now = new Date();
-  const history: RackReading[] = [];
+/**
+ * Bouw de rack-lijst op uit de API-metingen, de rack-configuratie en de
+ * gedeelde drempelwaarden.
+ *
+ * Racks waarvoor nog geen metingen bestaan komen er wel in te staan, met
+ * status "ok" en lege historie. Zo blijft de layout stabiel terwijl de
+ * eerste meting nog onderweg is.
+ */
+export function buildRacks(
+  readingsByRack: ReadingsByRack,
+  thresholds: Record<number, RackThresholds>
+): Rack[] {
+  return RACK_CONFIG.map((rackConfig) => {
+    const readings = readingsByRack[rackConfig.id] ?? [];
+    const recent = readings.slice(-HISTORY_POINTS);
 
-  for (let i = 59; i >= 0; i--) {
-    const timestamp = new Date(now.getTime() - i * 60000); // 1 minuut terug
-    history.push({
-      time: formatTime(timestamp),
-      temp: Number((baseTemp + randomBetween(-0.2, 0.2)).toFixed(1)),
-      humidity: Number((baseHumidity + randomBetween(-0.5, 0.5)).toFixed(1)),
-    });
-  }
+    const history: RackReading[] = recent.map((reading) => ({
+      time: formatTime(new Date(reading.timestamp)),
+      temp: reading.temperature,
+      humidity: reading.humidity,
+    }));
 
-  return history;
-}
+    const latest = recent[recent.length - 1];
+    const temp = latest?.temperature ?? 0;
+    const humidity = latest?.humidity ?? 0;
 
-// Initiële rack data (client-side model; racks staan niet meer in de database)
-export function createInitialRacks(): Rack[] {
-  return [
-    {
-      id: 1,
-      name: "Rack A",
-      location: "Noordzijde",
-      type: "server",
-      temp: 24.5,
-      humidity: 45,
-      status: "ok",
-      history: generateHistoricalData(24.5, 45),
-      devices: [
-        "Dell PowerEdge R740",
-        "HP ProLiant DL380 Gen10",
-        "Cisco Catalyst 9300",
-        "NetApp FAS2750",
-      ],
-    },
-    {
-      id: 2,
-      name: "Rack B",
-      location: "Centrale rij",
-      type: "network",
-      temp: 29.2,
-      humidity: 52,
-      status: "ok",
-      history: generateHistoricalData(29.2, 52),
-      devices: [
-        "Cisco Nexus 9000",
-        "Juniper EX4300",
-        "Arista 7050X3",
-        "Palo Alto PA-5220",
-      ],
-    },
-    {
-      id: 3,
-      name: "Rack C",
-      location: "Zuidzijde",
-      type: "server",
-      temp: 26.8,
-      humidity: 48,
-      status: "ok",
-      history: generateHistoricalData(26.8, 48),
-      devices: [
-        "HPE Apollo 6500 Gen10",
-        "Dell PowerEdge R640",
-        "EMC VNX5400",
-        "Eaton 9PX UPS",
-        "Dell PowerVault MD3400",
-      ],
-    },
-  ];
-}
+    const rackThresholds = thresholds[rackConfig.id];
+    const status: RackStatus =
+      latest && rackThresholds
+        ? deriveStatus(temp, humidity, rackThresholds)
+        : "ok";
 
-// Sample foto's voor bewegingsdetectie (serverruimte beelden)
-export const samplePhotos = [
-  "/serverroom.jpg",
-  "/serverroom.jpg",
-  "/serverroom.jpg",
-  "/serverroom.jpg",
-];
-
-// Update rack met nieuwe sensor reading, aan de hand van de rack-specifieke drempelwaardes.
-export function updateRackWithNewReading(
-  rack: Rack,
-  thresholds: Pick<RackThresholds, "tempThresholdHigh" | "tempThresholdLow" | "humidityThreshold">
-): Rack {
-  const drift = randomBetween(-0.4, 0.4);
-  const newTemp = Number((rack.temp + drift).toFixed(1));
-  const newHumidity = Number((rack.humidity + randomBetween(-0.3, 0.3)).toFixed(1));
-  const newStatus = deriveStatus(newTemp, newHumidity, thresholds);
-
-  const newReading: RackReading = {
-    time: formatTime(new Date()),
-    temp: newTemp,
-    humidity: newHumidity,
-  };
-
-  return {
-    ...rack,
-    temp: newTemp,
-    humidity: newHumidity,
-    status: newStatus,
-    history: [...rack.history.slice(-59), newReading], // Rolling window van 60
-  };
-}
-
-// Genereer random motion incident met foto (type: 'beweging')
-export function createMotionIncident(id: number): Incident {
-  const locations = [
-    "Noordzijde serverruimte",
-    "Centrale rij",
-    "Zuidzijde serverruimte",
-    "Ingang serverruimte",
-  ];
-  const randomLocation = locations[Math.floor(Math.random() * locations.length)];
-
-  return {
-    id,
-    time: formatDateTime(new Date()),
-    type: "beweging",
-    description: `Beweging gedetecteerd: ${randomLocation} - Foto automatisch opgeslagen`,
-    imagePath: samplePhotos[Math.floor(Math.random() * samplePhotos.length)],
-  };
-}
-
-// Genereer temperature alarm incident (type: 'temperatuur')
-export function createTemperatureAlarm(id: number, rackName: string): Incident {
-  return {
-    id,
-    time: formatDateTime(new Date()),
-    type: "temperatuur",
-    description: `Kritieke temperatuur gedetecteerd in ${rackName}`,
-  };
+    return {
+      id: rackConfig.id,
+      name: rackConfig.name,
+      location: rackConfig.location,
+      type: rackConfig.type,
+      temp,
+      humidity,
+      status,
+      history,
+      devices: rackConfig.devices,
+    };
+  });
 }

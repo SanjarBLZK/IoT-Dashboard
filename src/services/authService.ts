@@ -1,42 +1,24 @@
-import { supabase, isSupabaseEnabled } from "../lib/supabaseClient";
+import { api, ApiError } from "./apiClient";
 import { AuthUser } from "../types";
 
 /**
- * Auth service: praat met de `register_user` / `login_user` RPC functies.
+ * Authenticatie via de backend API.
  *
- * De wachtwoordverificatie gebeurt binnen Postgres (SECURITY DEFINER +
- * pgcrypto), zodat `password_hash` nooit naar de browser gaat.
- * Zie migrations/002_auth_functions.sql.
+ * Het wachtwoord wordt server-side met bcrypt gehasht en vergeleken; de
+ * browser krijgt de hash nooit te zien. De sessie is een httpOnly cookie dat
+ * door de server is ondertekend (JWT). JavaScript kan er niet bij, dus een
+ * XSS-lek kan het token niet stelen, en de inhoud is niet te manipuleren.
  *
- * SESSIEBEHEER
- * De sessie wordt client-side bewaard:
- *   - "Onthoud mij" aan  -> localStorage, 30 dagen geldig
- *   - "Onthoud mij" uit  -> sessionStorage, verdwijnt als de tab sluit
- * Dit is prototype-niveau: er is geen server-side getekend token. Voor een
- * productieomgeving hoort hier Supabase Auth (JWT) of een eigen backend.
+ * "Onthoud mij" bepaalt de levensduur van dat cookie: 30 dagen bij aan,
+ * 12 uur bij uit.
  */
 
-const SESSION_KEY = "iot-dashboard-session";
+// Alleen de gebruikersnaam onthouden we lokaal, om het inlogveld voor te
+// vullen. Het wachtwoord wordt nooit bewaard.
 const REMEMBERED_USER_KEY = "iot-dashboard-remembered-username";
 
-// Geldigheidsduur van een "onthoud mij" sessie.
-const REMEMBER_ME_DAYS = 30;
-
-interface StoredSession {
-  userId: number;
-  username: string;
-  createdAt: string;
-  lastLogin: string | null;
-  expiresAt: string | null; // null = alleen geldig binnen deze tab-sessie
-  remember: boolean;
-}
-
-// Ruwe rij zoals de RPC functies die teruggeven.
-interface UserRow {
-  id: number;
-  username: string;
-  created_at: string;
-  last_login: string | null;
+interface UserResponse {
+  user: AuthUser;
 }
 
 export interface AuthResult {
@@ -44,209 +26,108 @@ export interface AuthResult {
   error: string | null;
 }
 
-function rowToUser(row: UserRow): AuthUser {
-  return {
-    id: row.id,
-    username: row.username,
-    createdAt: row.created_at,
-    lastLogin: row.last_login,
-  };
-}
-
-function sessionToUser(session: StoredSession): AuthUser {
-  return {
-    id: session.userId,
-    username: session.username,
-    createdAt: session.createdAt,
-    lastLogin: session.lastLogin,
-  };
-}
-
-/**
- * Vertaal database-fouten naar begrijpelijke Nederlandse meldingen.
- */
-function translateError(message: string): string {
-  const msg = message.toLowerCase();
-
-  if (msg.includes("already in use") || msg.includes("al in gebruik")) {
-    return "Deze gebruikersnaam is al in gebruik.";
+function rememberUsername(username: string, remember: boolean): void {
+  try {
+    if (remember) {
+      localStorage.setItem(REMEMBERED_USER_KEY, username);
+    } else {
+      localStorage.removeItem(REMEMBERED_USER_KEY);
+    }
+  } catch {
+    // localStorage kan geblokkeerd zijn; niet kritisch.
   }
-  if (msg.includes("could not find the function") || msg.includes("does not exist")) {
-    return (
-      "De database functies ontbreken. Run migrations/002_auth_functions.sql " +
-      "in de Supabase SQL Editor."
-    );
-  }
-  if (msg.includes("failed to fetch") || msg.includes("networkerror")) {
-    return "Geen verbinding met de database. Check je internetverbinding.";
-  }
-  // Exceptions uit onze eigen functies zijn al Nederlands.
-  return message;
 }
 
 export const authService = {
   /**
-   * Log in met gebruikersnaam en wachtwoord.
-   * Bij succes wordt de sessie opgeslagen en `last_login` in de database
-   * bijgewerkt.
+   * Log in. Bij succes zet de server het sessiecookie en werkt `last_login` bij.
    */
   async login(
     username: string,
     password: string,
     remember: boolean
   ): Promise<AuthResult> {
-    if (!isSupabaseEnabled()) {
+    try {
+      const { user } = await api.post<UserResponse>("/auth/login", {
+        username,
+        password,
+        remember,
+      });
+
+      rememberUsername(user.username, remember);
+      return { user, error: null };
+    } catch (err) {
       return {
         user: null,
         error:
-          "Supabase is niet geconfigureerd. Zet VITE_SUPABASE_URL en " +
-          "VITE_SUPABASE_ANON_KEY in je .env bestand.",
+          err instanceof ApiError ? err.message : "Inloggen is mislukt.",
       };
-    }
-
-    try {
-      const { data, error } = await supabase!.rpc("login_user", {
-        p_username: username,
-        p_password: password,
-      });
-
-      if (error) {
-        return { user: null, error: translateError(error.message) };
-      }
-
-      const rows = (data ?? []) as UserRow[];
-
-      // 0 rijen = ongeldige combinatie. We zeggen niet welke van de twee fout
-      // is, zodat we geen bestaande gebruikersnamen verklappen.
-      if (rows.length === 0) {
-        return {
-          user: null,
-          error: "Onjuiste gebruikersnaam of wachtwoord.",
-        };
-      }
-
-      const user = rowToUser(rows[0]);
-      this.saveSession(user, remember);
-      return { user, error: null };
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      return { user: null, error: translateError(message) };
     }
   },
 
   /**
-   * Maak een nieuw account aan. Logt de gebruiker daarna meteen in.
+   * Maak een account aan. De server logt direct in bij succes.
    */
   async register(
     username: string,
     password: string,
     remember: boolean
   ): Promise<AuthResult> {
-    if (!isSupabaseEnabled()) {
+    try {
+      const { user } = await api.post<UserResponse>("/auth/register", {
+        username,
+        password,
+        remember,
+      });
+
+      rememberUsername(user.username, remember);
+      return { user, error: null };
+    } catch (err) {
       return {
         user: null,
         error:
-          "Supabase is niet geconfigureerd. Zet VITE_SUPABASE_URL en " +
-          "VITE_SUPABASE_ANON_KEY in je .env bestand.",
+          err instanceof ApiError
+            ? err.message
+            : "Account aanmaken is mislukt.",
       };
     }
+  },
 
+  /**
+   * Log uit. De server wist het sessiecookie.
+   */
+  async logout(): Promise<void> {
     try {
-      const { data, error } = await supabase!.rpc("register_user", {
-        p_username: username,
-        p_password: password,
-      });
-
-      if (error) {
-        return { user: null, error: translateError(error.message) };
-      }
-
-      const rows = (data ?? []) as UserRow[];
-      if (rows.length === 0) {
-        return { user: null, error: "Account aanmaken is mislukt." };
-      }
-
-      // Direct inloggen zodat `last_login` gevuld wordt.
-      return await this.login(username, password, remember);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      return { user: null, error: translateError(message) };
+      await api.post("/auth/logout");
+    } catch {
+      // Ook bij een serverfout willen we lokaal uitgelogd raken.
     }
   },
 
   /**
-   * Log uit. De onthouden gebruikersnaam blijft staan voor een snelle
-   * volgende login (het wachtwoord wordt nooit bewaard).
+   * Haal de huidige sessie op. Returns null als er niemand is ingelogd.
    */
-  logout(): void {
-    try {
-      localStorage.removeItem(SESSION_KEY);
-      sessionStorage.removeItem(SESSION_KEY);
-    } catch (err) {
-      console.warn("Kon sessie niet verwijderen:", err);
-    }
+  async getCurrentUser(): Promise<AuthUser | null> {
+    const result = await api.get<UserResponse | null>("/auth/me", true);
+    return result?.user ?? null;
   },
 
   /**
-   * Sla de sessie op. localStorage bij "onthoud mij", anders sessionStorage.
+   * Of er al minstens een account bestaat. Bij een verse installatie kan het
+   * inlogscherm dan direct de registratie-tab tonen.
    */
-  saveSession(user: AuthUser, remember: boolean): void {
-    const session: StoredSession = {
-      userId: user.id,
-      username: user.username,
-      createdAt: user.createdAt,
-      lastLogin: user.lastLogin,
-      expiresAt: remember
-        ? new Date(Date.now() + REMEMBER_ME_DAYS * 24 * 60 * 60 * 1000).toISOString()
-        : null,
-      remember,
-    };
-
+  async hasAnyAccount(): Promise<boolean> {
     try {
-      const payload = JSON.stringify(session);
-
-      if (remember) {
-        localStorage.setItem(SESSION_KEY, payload);
-        localStorage.setItem(REMEMBERED_USER_KEY, user.username);
-        sessionStorage.removeItem(SESSION_KEY);
-      } else {
-        sessionStorage.setItem(SESSION_KEY, payload);
-        localStorage.removeItem(SESSION_KEY);
-        localStorage.removeItem(REMEMBERED_USER_KEY);
-      }
-    } catch (err) {
-      console.warn("Kon sessie niet opslaan:", err);
+      const { hasAccount } = await api.get<{ hasAccount: boolean }>(
+        "/auth/exists"
+      );
+      return hasAccount;
+    } catch {
+      // Bij twijfel de login-tab tonen.
+      return true;
     }
   },
 
-  /**
-   * Haal de opgeslagen sessie op. Verlopen sessies worden opgeruimd.
-   */
-  getSession(): AuthUser | null {
-    try {
-      // sessionStorage heeft voorrang: dat is de sessie van deze tab.
-      const raw =
-        sessionStorage.getItem(SESSION_KEY) ?? localStorage.getItem(SESSION_KEY);
-      if (!raw) return null;
-
-      const session = JSON.parse(raw) as StoredSession;
-
-      if (session.expiresAt && new Date(session.expiresAt) < new Date()) {
-        this.logout();
-        console.log("🔒 Sessie verlopen, opnieuw inloggen vereist");
-        return null;
-      }
-
-      return sessionToUser(session);
-    } catch (err) {
-      console.warn("Kon sessie niet lezen:", err);
-      return null;
-    }
-  },
-
-  /**
-   * De laatst onthouden gebruikersnaam, om het inlogveld voor te vullen.
-   */
   getRememberedUsername(): string {
     try {
       return localStorage.getItem(REMEMBERED_USER_KEY) ?? "";

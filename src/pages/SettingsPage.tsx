@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { useSettings, RACK_IDS, DEFAULT_THRESHOLDS } from "../hooks/useSettings";
+import { useSettings, DEFAULT_THRESHOLDS } from "../hooks/useSettings";
+import { RACK_CONFIG } from "../config/racks";
 import { RackThresholds } from "../types";
 
 interface SettingsPageProps {
@@ -9,13 +10,6 @@ interface SettingsPageProps {
   onAlertDismiss: () => void;
   playAlertBeep: () => void;
 }
-
-// Display labels voor rack IDs (racks staan niet in de database).
-const RACK_LABELS: Record<number, { name: string; location: string }> = {
-  1: { name: "Rack A", location: "Noordzijde" },
-  2: { name: "Rack B", location: "Centrale rij" },
-  3: { name: "Rack C", location: "Zuidzijde" },
-};
 
 export function SettingsPage({
   hasCritical,
@@ -30,8 +24,6 @@ export function SettingsPage({
     updateRackThreshold,
     updateAudio,
     resetAll,
-    syncStatus,
-    isSupabaseEnabled,
   } = useSettings();
 
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
@@ -59,9 +51,9 @@ export function SettingsPage({
     }, 500);
   };
 
-  const handleReset = async () => {
+  const handleReset = () => {
     if (resetConfirm) {
-      await resetAll();
+      resetAll();
       setResetConfirm(false);
       setSaveStatus("saved");
       setTimeout(() => setSaveStatus("idle"), 2000);
@@ -108,28 +100,13 @@ export function SettingsPage({
           Configureer drempelwaarden per rack en audio voorkeuren.
         </p>
 
-        {/* Supabase Status Indicator */}
-        {isSupabaseEnabled && (
-          <div className="mt-4 flex items-center gap-2">
-            <div
-              className={`w-2 h-2 rounded-full ${
-                syncStatus === "syncing"
-                  ? "bg-yellow-500 animate-pulse"
-                  : syncStatus === "synced"
-                  ? "bg-green-500"
-                  : syncStatus === "error"
-                  ? "bg-red-500"
-                  : "bg-slate-600"
-              }`}
-            />
-            <span className="text-xs text-slate-400">
-              {syncStatus === "syncing" && "Synchroniseren met server..."}
-              {syncStatus === "synced" && "✅ Gesynchroniseerd met server"}
-              {syncStatus === "error" && "❌ Synchronisatie mislukt"}
-              {syncStatus === "idle" && "Verbonden met Supabase database"}
-            </span>
-          </div>
-        )}
+        {/* Opslag indicator */}
+        <div className="mt-4 flex items-center gap-2">
+          <div className="w-2 h-2 rounded-full bg-slate-500" />
+          <span className="text-xs text-slate-400">
+            Lokaal opgeslagen in deze browser
+          </span>
+        </div>
       </div>
 
       {/* Save Status Banner */}
@@ -161,12 +138,12 @@ export function SettingsPage({
           </h2>
         </div>
         <p className="text-sm text-slate-400 -mt-4">
-          Deze waardes worden opgeslagen in de <code>settings</code> tabel.
+          Per rack instelbaar. Wijzigingen worden direct toegepast.
         </p>
 
-        {RACK_IDS.map((rackId) => {
+        {RACK_CONFIG.map((rack) => {
+          const rackId = rack.id;
           const t = rackThresholds[rackId] ?? { rackId, ...DEFAULT_THRESHOLDS };
-          const label = RACK_LABELS[rackId] ?? { name: `Rack ${rackId}`, location: "" };
 
           return (
             <div
@@ -175,12 +152,8 @@ export function SettingsPage({
             >
               <div className="flex items-center justify-between">
                 <div>
-                  <div className="text-slate-100 font-semibold">
-                    {label.name}
-                  </div>
-                  {label.location && (
-                    <div className="text-xs text-slate-500">{label.location}</div>
-                  )}
+                  <div className="text-slate-100 font-semibold">{rack.name}</div>
+                  <div className="text-xs text-slate-500">{rack.location}</div>
                 </div>
                 <div className="text-xs text-slate-500 font-mono">
                   rack_id = {rackId}
@@ -287,7 +260,7 @@ export function SettingsPage({
           <h2 className="text-xl font-bold text-slate-100">Audio Instellingen</h2>
         </div>
         <p className="text-xs text-slate-500 -mt-4">
-          Audio voorkeuren staan lokaal per apparaat opgeslagen (niet in de database).
+          Audio voorkeuren gelden per apparaat.
         </p>
 
         {/* Audio aan/uit */}
@@ -435,12 +408,9 @@ export function SettingsPage({
         <div className="flex items-start gap-2 text-sm text-slate-400">
           <div>💡</div>
           <div>
-            <strong className="text-slate-300">Tip:</strong> Rack drempelwaarden
-            worden{" "}
-            {isSupabaseEnabled
-              ? "automatisch gesynchroniseerd met de Supabase database"
-              : "lokaal in je browser opgeslagen. Verbind Supabase om waardes te delen tussen apparaten"}
-            .
+            <strong className="text-slate-300">Tip:</strong> Alle instellingen
+            worden automatisch lokaal in je browser opgeslagen. Ze gelden dus
+            alleen op dit apparaat, tot de database-koppeling er is.
           </div>
         </div>
       </div>

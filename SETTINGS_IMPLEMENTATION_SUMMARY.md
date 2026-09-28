@@ -242,7 +242,7 @@ Display:
 1. **Dark/Light Mode**: Alleen dark mode volledig gestyled
 2. **Kleurthema**: Niet toegepast op alle UI componenten
 3. **Browser Support**: IE11 niet ondersteund (Web Audio API)
-4. **Supabase Sync**: Nog niet geïmplementeerd (lokaal only)
+4. **Database Sync**: Nog niet geïmplementeerd (lokaal only)
 5. **Grafiek History**: Bestaande history wordt niet aangepast retroactief
 
 ## 🔮 Toekomstige Uitbreidingen
@@ -253,7 +253,7 @@ Display:
 - [ ] Export/Import settings (JSON)
 
 ### Prioriteit 2 (Nice to Have)
-- [ ] Supabase settings synchronisatie
+- [ ] Settings synchronisatie via de backend
 - [ ] Rack-specifieke instellingen override
 - [ ] Volledige dark/light mode implementatie
 - [ ] Kleurthema volledig uitwerken

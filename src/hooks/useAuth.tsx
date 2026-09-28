@@ -12,7 +12,7 @@ import { authService } from "../services/authService";
 interface AuthContextValue {
   /** De ingelogde gebruiker, of null als er niemand is ingelogd. */
   user: AuthUser | null;
-  /** True tijdens het herstellen van een opgeslagen sessie bij opstarten. */
+  /** True zolang we bij de server navragen of er een sessie is. */
   isLoading: boolean;
   /** Log in. Returns een foutmelding, of null bij succes. */
   login: (
@@ -26,8 +26,8 @@ interface AuthContextValue {
     password: string,
     remember: boolean
   ) => Promise<string | null>;
-  /** Log uit en wis de sessie. */
-  logout: () => void;
+  /** Log uit en wis de serversessie. */
+  logout: () => Promise<void>;
   /** Laatst onthouden gebruikersnaam, om het formulier voor te vullen. */
   rememberedUsername: string;
 }
@@ -39,15 +39,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [rememberedUsername, setRememberedUsername] = useState("");
 
-  // Herstel een bestaande sessie bij het opstarten van de app.
+  // Bij het opstarten: navragen of het sessiecookie nog geldig is.
+  // Dat cookie is httpOnly, dus alleen de server kan dat beoordelen.
   useEffect(() => {
-    const existing = authService.getSession();
-    if (existing) {
-      setUser(existing);
-      console.log(`🔓 Sessie hersteld voor "${existing.username}"`);
-    }
-    setRememberedUsername(authService.getRememberedUsername());
-    setIsLoading(false);
+    let active = true;
+
+    (async () => {
+      try {
+        const current = await authService.getCurrentUser();
+        if (!active) return;
+
+        if (current) {
+          setUser(current);
+          console.log(`🔓 Sessie actief voor "${current.username}"`);
+        }
+      } catch (err) {
+        console.warn("Kon sessie niet controleren:", err);
+      } finally {
+        if (active) {
+          setRememberedUsername(authService.getRememberedUsername());
+          setIsLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   const login = useCallback(
@@ -88,8 +106,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     []
   );
 
-  const logout = useCallback(() => {
-    authService.logout();
+  const logout = useCallback(async () => {
+    await authService.logout();
     setUser(null);
     setRememberedUsername(authService.getRememberedUsername());
     console.log("🔒 Uitgelogd");

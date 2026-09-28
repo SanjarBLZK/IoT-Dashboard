@@ -124,11 +124,7 @@ npm install
 # 2. Voeg je serverruimte foto toe
 # Plaats serverroom.jpg in public/ folder
 
-# 3. Optioneel: Configureer Supabase
-# Kopieer .env.example naar .env
-# Vul credentials in (zie CAMERA_SUPABASE_SETUP.md)
-
-# 4. Start dev server
+# 3. Start dev server
 npm run dev
 ```
 
@@ -149,17 +145,7 @@ npm run dev
 ```
 - Werkt lokaal
 - Hot reload
-- Incidents verdwijnen bij reload (tenzij Supabase geconfigureerd)
-
-### Development + Database:
-```powershell
-# 1. Setup Supabase (zie CAMERA_SUPABASE_SETUP.md)
-# 2. Start app
-npm run dev
-```
-- Werkt lokaal
-- Hot reload  
-- Incidents blijven bewaard in database ✅
+- Incidents worden in de PostgreSQL database bewaard
 
 ### Production (Server):
 ```powershell
@@ -201,14 +187,13 @@ Remove-Item package-lock.json
 npm install
 ```
 
-### Error: "Supabase credentials not found"
+### Incidents blijven staan na reload
 
-**Dit is geen error!** Het is een waarschuwing.
-
-**Betekent:**
-- App werkt nog steeds
-- Incidents worden alleen lokaal opgeslagen
-- Om database opslag te krijgen: zie `CAMERA_SUPABASE_SETUP.md`
+**Dat hoort zo:**
+- Incidents staan in de PostgreSQL database
+- Ze zijn dus op elk apparaat hetzelfde
+- Wil je ze wissen?
+  `docker compose exec db psql -U iot_user -d iot_dashboard -c "DELETE FROM incidents;"`
 
 ### Error: Docker niet gevonden
 
@@ -224,7 +209,6 @@ npm run dev
 ## 📚 Meer Informatie
 
 - **Docker Problemen**: `DOCKER_FIX.md`
-- **Supabase Setup**: `CAMERA_SUPABASE_SETUP.md`  
 - **Camera Feature**: `CAMERA_FEATURE.md`
 - **Algemeen**: `README.md`
 

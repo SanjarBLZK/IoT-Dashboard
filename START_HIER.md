@@ -197,11 +197,11 @@ Na het plaatsen van jouw foto:
 
 ## 🚀 Volgende Stappen (Optioneel)
 
-1. **Supabase Integratie** - Zie `IMPLEMENTATION_CHECKLIST.md`
+1. **PostgreSQL Integratie** - Zie `migrations/001_initial_schema.sql`
 2. **Meerdere Camera's** - Voeg CAM-02, CAM-03 toe
 3. **Echte Camera** - Integreer met IP camera of webcam
 4. **Video Recording** - Implementeer video opname feature
-5. **Cloud Storage** - Upload foto's naar Supabase Storage
+5. **Foto Opslag** - Upload foto's naar de backend
 
 ---
 

@@ -94,8 +94,8 @@
 └──────────────────────────────┴──────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────┐
-│  💡 Tip: Alle instellingen worden lokaal opgeslagen in...  │
-│     Bij gebruik van Supabase database kunnen...             │
+│  💡 Tip: Drempelwaarden worden in de database opgeslagen en  │
+│     gelden voor alle apparaten. Audio blijft per apparaat.   │
 └─────────────────────────────────────────────────────────────┘
 ```
 

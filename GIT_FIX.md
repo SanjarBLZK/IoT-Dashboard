@@ -72,7 +72,7 @@ git push origin main
 git add .
 
 # Commit
-git commit -m "Add Supabase documentation and memorybank"
+git commit -m "Update project documentation"
 
 # Push
 git push origin main

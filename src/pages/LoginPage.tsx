@@ -1,12 +1,15 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "../hooks/useAuth";
-import { isSupabaseEnabled } from "../lib/supabaseClient";
+import { authService } from "../services/authService";
 
 type Mode = "login" | "register";
 
 export function LoginPage() {
   const { login, register, rememberedUsername } = useAuth();
 
+  // Bij een verse installatie bestaat er nog geen account: dan tonen we
+  // direct de registratie-tab. Dit wordt bij de server opgevraagd.
+  const [hasAccount, setHasAccount] = useState(true);
   const [mode, setMode] = useState<Mode>("login");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -16,8 +19,6 @@ export function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const supabaseReady = isSupabaseEnabled();
-
   // Vul de onthouden gebruikersnaam voor en vink "onthoud mij" alvast aan.
   useEffect(() => {
     if (rememberedUsername) {
@@ -25,6 +26,22 @@ export function LoginPage() {
       setRemember(true);
     }
   }, [rememberedUsername]);
+
+  // Vraag de server of er al accounts bestaan. Zo niet, dan opent het
+  // formulier op de registratie-tab.
+  useEffect(() => {
+    let active = true;
+
+    authService.hasAnyAccount().then((present) => {
+      if (!active) return;
+      setHasAccount(present);
+      if (!present) setMode("register");
+    });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const switchMode = (next: Mode) => {
     setMode(next);
@@ -86,19 +103,19 @@ export function LoginPage() {
           </p>
         </div>
 
-        {/* Waarschuwing als Supabase niet is ingesteld */}
-        {!supabaseReady && (
+        {/* Melding bij een verse installatie zonder accounts */}
+        {!hasAccount && (
           <div
-            role="alert"
-            className="mb-6 bg-amber-500/10 border border-amber-500/40 rounded-lg p-4 text-sm text-amber-200"
+            role="status"
+            className="mb-6 bg-cyan-500/10 border border-cyan-500/40 rounded-lg p-4 text-sm text-cyan-200"
           >
-            <div className="font-semibold mb-1">⚠️ Database niet verbonden</div>
-            Zet <code className="font-mono">VITE_SUPABASE_URL</code> en{" "}
-            <code className="font-mono">VITE_SUPABASE_ANON_KEY</code> in je{" "}
-            <code className="font-mono">.env</code> bestand en herstart{" "}
-            <code className="font-mono">npm run dev</code>.
+            <div className="font-semibold mb-1">👋 Nog geen account</div>
+            Er bestaat nog geen account op dit apparaat. Maak er hieronder een
+            aan om het dashboard te openen.
           </div>
         )}
+
+
 
         {/* Formulier */}
         <form
@@ -246,7 +263,7 @@ export function LoginPage() {
           {/* Submit */}
           <button
             type="submit"
-            disabled={isSubmitting || !supabaseReady}
+            disabled={isSubmitting}
             className="w-full px-6 py-3 bg-cyan-600 hover:bg-cyan-700 disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed rounded-lg font-bold text-white transition-colors flex items-center justify-center gap-2"
           >
             {isSubmitting ? (

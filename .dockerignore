@@ -11,3 +11,8 @@ npm-debug.log
 yarn-error.log
 coverage
 .DS_Store
+
+# De backend heeft zijn eigen build context (./server met eigen Dockerfile).
+# Zonder deze regel zou de frontend image de hele server map meekopieren,
+# inclusief node_modules.
+server

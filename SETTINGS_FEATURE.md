@@ -2,7 +2,12 @@
 
 ## 📋 Overzicht
 
-De nieuwe **Instellingen** pagina biedt gebruikers volledige controle over hun IoT Dashboard ervaring. Alle instellingen worden lokaal opgeslagen in de browser met localStorage en blijven bewaard tussen sessies.
+De **Instellingen** pagina biedt controle over de drempelwaarden en audio.
+
+> ℹ️ **Bijgewerkt**: drempelwaarden staan nu in de PostgreSQL `settings` tabel
+> en zijn gedeeld tussen alle apparaten. Alleen de audio voorkeuren blijven
+> lokaal per apparaat. Delen van dit document beschrijven nog de oude
+> localStorage-opzet; `README.md` is leidend.
 
 ## 🎯 Features
 
@@ -240,10 +245,10 @@ playNotificationSound(settings.notificationVolume);
 
 ### Geplande Features (TODO)
 
-#### 1. Supabase Synchronisatie
+#### 1. Database Synchronisatie
 ```typescript
-// Sync settings naar database voor cross-device
-const { settings } = useSupabaseSettings(userId);
+// Drempelwaarden uit de settings tabel halen via de backend
+const thresholds = await fetch('/api/settings').then((r) => r.json());
 ```
 
 #### 2. Luchtvochtigheid Drempelwaarden
@@ -319,7 +324,7 @@ importSettings(config);
 2. **Kleurthema**: Niet toegepast op alle UI elementen
 3. **localStorage limiet**: Maximaal ~5MB (niet een issue voor ons)
 4. **Browser compatibility**: IE11 niet ondersteund (Web Audio API)
-5. **Real-time sync**: Alleen lokaal, geen multi-device sync zonder Supabase
+5. **Real-time sync**: Alleen lokaal, multi-device sync vereist de backend
 
 ## 🔐 Privacy & Beveiliging
 

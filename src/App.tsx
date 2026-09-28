@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { Rack, Incident } from "./types";
 import { Navigation } from "./components/Navigation";
@@ -8,22 +8,14 @@ import { SettingsPage } from "./pages/SettingsPage";
 import { LoginPage } from "./pages/LoginPage";
 import { playAlertBeep, playNotificationSound } from "./utils/audio";
 import { incidentService } from "./services/incidentService";
-import { useSettings, DEFAULT_THRESHOLDS } from "./hooks/useSettings";
+import { sensorService } from "./services/sensorService";
+import { useSettings } from "./hooks/useSettings";
 import { AuthProvider, useAuth } from "./hooks/useAuth";
-import {
-  createInitialRacks,
-  updateRackWithNewReading,
-  deriveStatus,
-  createMotionIncident,
-  createTemperatureAlarm,
-  randomBetween,
-} from "./utils/simulation";
+import { buildRacks } from "./utils/simulation";
 
-/**
- * App root: zet de auth context op en laat AuthGate bepalen wat er getoond
- * wordt. De router staat er buiten zodat ook het inlogscherm routes kan
- * gebruiken indien nodig.
- */
+// Hoe vaak we nieuwe sensordata en incidents ophalen.
+const POLL_INTERVAL_MS = 15_000;
+
 function App() {
   return (
     <BrowserRouter>
@@ -36,14 +28,12 @@ function App() {
 
 /**
  * Bepaalt of het dashboard of het inlogscherm getoond wordt.
- * Het monitoring-gedeelte wordt pas gemount na een succesvolle login, zodat
- * de sensor-simulatie en alarmen niet op de achtergrond draaien terwijl
- * niemand is ingelogd.
+ * Het monitoring-gedeelte wordt pas gemount na een geldige sessie, zodat we
+ * geen API-calls doen voor iemand die niet is ingelogd.
  */
 function AuthGate() {
   const { user, isLoading } = useAuth();
 
-  // Korte laadstaat tijdens het herstellen van een opgeslagen sessie.
   if (isLoading) {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center">
@@ -63,147 +53,93 @@ function AuthGate() {
 }
 
 /**
- * Het eigenlijke dashboard. Draait alleen wanneer er een gebruiker is ingelogd.
+ * Het dashboard. Haalt sensordata, incidents en drempelwaarden op bij de API.
+ *
+ * De sensorsimulatie draait op de server, dus dit component genereert zelf
+ * geen data meer: het toont wat er in de database staat. Daardoor zien alle
+ * apparaten hetzelfde.
  */
 function MonitoringApp() {
-  // Settings hook (per-rack thresholds + lokale audio voorkeuren)
-  const { rackThresholds, audio } = useSettings();
+  const { rackThresholds, audio, isLoading: settingsLoading } = useSettings();
 
-  // State
-  const [racks, setRacks] = useState<Rack[]>(createInitialRacks());
+  const [racks, setRacks] = useState<Rack[]>([]);
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [alertDismissed, setAlertDismissed] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  // Refs voor ID tracking
-  const incidentIdRef = useRef(1);
+  // Onthoudt welke racks al kritiek waren en welk incident we al gezien
+  // hebben, zodat we niet bij elke poll opnieuw geluid afspelen.
   const previousCriticalRacks = useRef<Set<number>>(new Set());
+  const lastSeenIncidentId = useRef<number | null>(null);
+  const isFirstLoad = useRef(true);
 
-  // Laad bestaande incidents bij opstarten (indien Supabase geconfigureerd)
-  useEffect(() => {
-    const loadIncidents = async () => {
-      const existingIncidents = await incidentService.getRecentIncidents(20);
-      if (existingIncidents && existingIncidents.length > 0) {
-        setIncidents(existingIncidents);
-        const maxId = Math.max(...existingIncidents.map((i) => i.id));
-        incidentIdRef.current = maxId + 1;
-        console.log(`📚 ${existingIncidents.length} incidents geladen uit Supabase`);
+  const refresh = useCallback(async () => {
+    try {
+      const [{ readings }, latestIncidents] = await Promise.all([
+        sensorService.getReadings(),
+        incidentService.getRecentIncidents(50),
+      ]);
+
+      setRacks(buildRacks(readings, rackThresholds));
+      setIncidents(latestIncidents);
+      setLoadError(null);
+
+      // Geluid bij een nieuw incident, maar niet bij de eerste keer laden
+      // (dan zou je de hele geschiedenis te horen krijgen).
+      const newest = latestIncidents[0];
+      if (newest) {
+        if (isFirstLoad.current) {
+          lastSeenIncidentId.current = newest.id;
+        } else if (
+          lastSeenIncidentId.current !== null &&
+          newest.id > lastSeenIncidentId.current
+        ) {
+          if (newest.type === "beweging" && audio.notificationEnabled) {
+            playNotificationSound(audio.notificationVolume);
+          }
+          lastSeenIncidentId.current = newest.id;
+        }
       }
-    };
 
-    loadIncidents();
+      isFirstLoad.current = false;
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Kon data niet ophalen.";
+      setLoadError(message);
+      console.error("❌ Ophalen mislukt:", message);
+    }
+  }, [rackThresholds, audio.notificationEnabled, audio.notificationVolume]);
 
-    // Subscribe to real-time incident updates
-    const unsubscribe = incidentService.subscribeToIncidents((newIncident) => {
-      console.log("🔔 Nieuw incident ontvangen via real-time:", newIncident);
-      setIncidents((prev) => {
-        if (prev.some((i) => i.id === newIncident.id)) return prev;
-        return [newIncident, ...prev.slice(0, 19)];
-      });
-    });
-
-    return () => {
-      if (unsubscribe) unsubscribe();
-    };
-  }, []);
-
-  // Update sensor data elke minuut, per-rack met eigen thresholds.
+  // Wacht met ophalen tot de drempelwaarden binnen zijn, anders zou de status
+  // even op basis van de defaults worden berekend.
   useEffect(() => {
-    const interval = setInterval(() => {
-      setRacks((prevRacks) =>
-        prevRacks.map((rack) => {
-          const th = rackThresholds[rack.id] ?? { rackId: rack.id, ...DEFAULT_THRESHOLDS };
-          return updateRackWithNewReading(rack, th);
-        })
-      );
-    }, 60000);
+    if (settingsLoading) return;
 
+    refresh();
+    const interval = setInterval(refresh, POLL_INTERVAL_MS);
     return () => clearInterval(interval);
-  }, [rackThresholds]);
+  }, [refresh, settingsLoading]);
 
-  // Herbereken rack status direct wanneer drempelwaarden veranderen
-  // (per-rack: sensor_data-gedreven thresholds uit de `settings` tabel).
+  // Alarm bij een rack dat nieuw kritiek wordt.
   useEffect(() => {
-    setRacks((prevRacks) =>
-      prevRacks.map((rack) => {
-        const th = rackThresholds[rack.id] ?? { rackId: rack.id, ...DEFAULT_THRESHOLDS };
-        return {
-          ...rack,
-          status: deriveStatus(rack.temp, rack.humidity, th),
-        };
-      })
+    const criticalIds = new Set(
+      racks.filter((r) => r.status === "critical").map((r) => r.id)
     );
-  }, [rackThresholds]);
 
-  // Check voor kritieke temperaturen en speel alarm
-  useEffect(() => {
-    const criticalRacks = racks.filter((r) => r.status === "critical");
-    const criticalRackIds = new Set(criticalRacks.map((r) => r.id));
+    const hasNewCritical = [...criticalIds].some(
+      (id) => !previousCriticalRacks.current.has(id)
+    );
 
-    criticalRacks.forEach(async (rack) => {
-      if (!previousCriticalRacks.current.has(rack.id)) {
-        const alarm = createTemperatureAlarm(incidentIdRef.current++, rack.name);
-        setIncidents((prev) => [alarm, ...prev.slice(0, 19)]);
-
-        if (audio.audioEnabled) {
-          playAlertBeep(audio.alarmVolume);
-        }
-        setAlertDismissed(false);
-
-        const saved = await incidentService.saveIncident({
-          time: alarm.time,
-          type: alarm.type,
-          description: alarm.description,
-          imagePath: alarm.imagePath,
-        });
-
-        if (saved) {
-          console.log("🚨 Temperatuur alarm opgeslagen in Supabase database");
-        }
+    if (hasNewCritical) {
+      if (audio.audioEnabled) {
+        playAlertBeep(audio.alarmVolume);
       }
-    });
+      setAlertDismissed(false);
+    }
 
-    previousCriticalRacks.current = criticalRackIds;
+    previousCriticalRacks.current = criticalIds;
   }, [racks, audio.audioEnabled, audio.alarmVolume]);
 
-  // Simuleer bewegingsdetectie (random tussen 45-90 seconden)
-  useEffect(() => {
-    const scheduleMotion = () => {
-      const delay = randomBetween(45000, 90000, 0);
-      const timer = setTimeout(() => {
-        triggerMotionDetection();
-        scheduleMotion();
-      }, delay);
-      return timer;
-    };
-
-    const timer = scheduleMotion();
-    return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Handler voor bewegingsdetectie
-  const triggerMotionDetection = async () => {
-    const motion = createMotionIncident(incidentIdRef.current++);
-
-    setIncidents((prev) => [motion, ...prev.slice(0, 19)]);
-
-    if (audio.notificationEnabled) {
-      playNotificationSound(audio.notificationVolume);
-    }
-
-    const saved = await incidentService.saveIncident({
-      time: motion.time,
-      type: motion.type,
-      description: motion.description,
-      imagePath: motion.imagePath,
-    });
-
-    if (saved) {
-      console.log("📷 Camera detectie opgeslagen in Supabase database");
-    }
-  };
-
-  // Check of er kritieke status is
   const hasCritical = racks.some((r) => r.status === "critical");
   const criticalRackNames = racks
     .filter((r) => r.status === "critical")
@@ -214,6 +150,17 @@ function MonitoringApp() {
     <div className="min-h-screen bg-slate-950 text-slate-100 flex items-start justify-center p-6">
       <div className="w-full max-w-5xl">
         <Navigation />
+
+        {/* Verbindingsprobleem met de API */}
+        {loadError && (
+          <div
+            role="alert"
+            className="mb-6 bg-red-500/10 border border-red-500/40 rounded-lg p-4 text-sm text-red-200"
+          >
+            <span className="font-semibold">Geen data: </span>
+            {loadError}
+          </div>
+        )}
 
         <Routes>
           <Route
