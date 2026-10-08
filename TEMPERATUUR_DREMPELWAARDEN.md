@@ -149,7 +149,7 @@ Alarm triggered als critical
 ## 💾 Opslag
 
 **Drempelwaarden worden opgeslagen in:**
-- De `settings` tabel in PostgreSQL (één rij per rack)
+- De `settings` tabel in MariaDB (één rij per rack)
 - Gedeeld tussen alle apparaten: past iemand iets aan, dan zien de andere
   apparaten dat binnen 10 seconden
 - Zie `server/src/schema.sql` voor het tabelontwerp

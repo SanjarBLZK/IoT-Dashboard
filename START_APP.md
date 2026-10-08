@@ -145,7 +145,7 @@ npm run dev
 ```
 - Werkt lokaal
 - Hot reload
-- Incidents worden in de PostgreSQL database bewaard
+- Incidents worden in de MariaDB database bewaard
 
 ### Production (Server):
 ```powershell
@@ -190,10 +190,10 @@ npm install
 ### Incidents blijven staan na reload
 
 **Dat hoort zo:**
-- Incidents staan in de PostgreSQL database
+- Incidents staan in de MariaDB database
 - Ze zijn dus op elk apparaat hetzelfde
 - Wil je ze wissen?
-  `docker compose exec db psql -U iot_user -d iot_dashboard -c "DELETE FROM incidents;"`
+  `docker compose exec db mariadb -u iot_user -p iot_dashboard -e "DELETE FROM incidents;"`
 
 ### Error: Docker niet gevonden
 

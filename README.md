@@ -1,12 +1,12 @@
 # IoT Dashboard - Server Room Monitoring System
 
 Real-time monitoring van serverruimte temperatuur, luchtvochtigheid en
-beveiligingsincidenten. React frontend, Node API en PostgreSQL, alles in Docker.
+beveiligingsincidenten. React frontend, Node API en MariaDB, alles in Docker.
 
 ![Status](https://img.shields.io/badge/Status-Werkend-success)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.2-blue)
 ![React](https://img.shields.io/badge/React-18.2-61dafb)
-![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791)
+![MariaDB](https://img.shields.io/badge/MariaDB-11-003545)
 ![Docker](https://img.shields.io/badge/Docker-Compose-2496ed)
 
 ## 🏗️ Architectuur
@@ -30,12 +30,12 @@ Browser
                            │
                            ▼
                   ┌──────────────────┐
-                  │  db (PostgreSQL) │  niet publiek
+                  │  db (MariaDB 11) │  niet publiek
                   │  4 tabellen      │
                   └──────────────────┘
 ```
 
-**Waarom een API-laag?** Een browser kan niet direct met PostgreSQL praten; dat
+**Waarom een API-laag?** Een browser kan niet direct met MariaDB praten; dat
 gebruikt een eigen TCP-protocol, geen HTTP. De API is dus geen extra luxe maar
 noodzakelijk. Het is ook de plek waar wachtwoorden veilig worden gehasht.
 
@@ -63,23 +63,30 @@ iemand iets, dan verandert het overal.
 
 ### Maximaal 500 sensor logs
 
-Een database trigger ruimt automatisch op na elke insert:
+Na elke insert ruimt de API de oudste metingen op (`enforceSensorLimit()` in
+`server/src/db.js`). Het zoekt het id van de 500e nieuwste meting en gooit
+alles wat ouder is weg:
 
 ```sql
-DELETE FROM sensor_data
-WHERE id IN (
-  SELECT id FROM sensor_data
-  ORDER BY timestamp DESC, id DESC
-  OFFSET 500
-);
+SELECT id FROM sensor_data ORDER BY id DESC LIMIT 1 OFFSET 499;
+DELETE FROM sensor_data WHERE id < ?;
 ```
 
-Die 500 geldt voor de **hele tabel**, niet per rack. Met drie racks die elke
-minuut meten is dat ongeveer 2,5 uur historie. Wil je meer, pas dan zowel
-`max_rows` in `server/src/schema.sql` als `SENSOR_LOG_LIMIT` in `.env` aan.
+Omdat `id` AUTO_INCREMENT is, loopt de id-volgorde gelijk met de tijd. Het is
+dus een indexscan op de primary key: goedkoop, ook bij elke meting.
 
-De trigger staat op `FOR EACH STATEMENT` in plaats van `FOR EACH ROW`, zodat
-de opruiming één keer per insert-opdracht draait in plaats van per rij.
+**Waarom niet met een trigger?** MariaDB staat niet toe dat een trigger de
+tabel muteert waarop hij zelf staat — dat geeft fout 1442 (`Can't update table
+'sensor_data' in stored function/trigger`). In PostgreSQL kon dat wel. De
+opruiming zit daarom in de API. Alle schrijfwegen lopen via de API (de
+simulator en `POST /api/sensors`), dus de limiet wordt altijd toegepast.
+
+Gebruik voor nieuwe metingen altijd `insertSensorReading()` uit `db.js`, dan
+kan het opruimen niet per ongeluk worden overgeslagen.
+
+Die 500 geldt voor de **hele tabel**, niet per rack. Met drie racks die elke
+minuut meten is dat ongeveer 2,5 uur historie. Wil je meer, pas dan
+`SENSOR_LOG_LIMIT` in `.env` aan; dat is de enige plek waar het getal staat.
 
 ## 🔐 Beveiliging
 
@@ -95,9 +102,11 @@ Dit is echte authenticatie, anders dan de eerdere localStorage-versie:
   uitgevoerd, zodat de responstijd niet verraadt of een account bestaat.
 - De foutmelding is altijd "Onjuiste gebruikersnaam of wachtwoord", nooit welke
   van de twee fout was.
-- PostgreSQL en de API staan **niet** op het internet. Alleen nginx is bereikbaar.
-- De API weigert te starten zonder `POSTGRES_PASSWORD` en een `JWT_SECRET` van
+- MariaDB en de API staan **niet** op het internet. Alleen nginx is bereikbaar.
+- De API weigert te starten zonder `MARIADB_PASSWORD` en een `JWT_SECRET` van
   minimaal 32 tekens. Placeholders als "changeme" worden geweigerd.
+- Het root-wachtwoord van MariaDB wordt willekeurig gegenereerd en nergens
+  bewaard. De applicatiegebruiker heeft alleen rechten op zijn eigen database.
 
 > ⚠️ Zet `COOKIE_SECURE=true` in `.env` zodra je HTTPS hebt. Zonder certificaat
 > moet dit op `false`, anders stuurt de browser het cookie niet mee en kun je
@@ -132,7 +141,7 @@ cp .env.example .env
 Genereer twee sterke waarden:
 
 ```bash
-echo "POSTGRES_PASSWORD=$(openssl rand -base64 32)"
+echo "MARIADB_PASSWORD=$(openssl rand -base64 32)"
 echo "JWT_SECRET=$(openssl rand -base64 48)"
 ```
 
@@ -167,7 +176,7 @@ sudo ufw allow 3002/tcp
 sudo ufw enable
 ```
 
-Open **niet** poort 5432 of 3000. Die zijn bewust alleen intern bereikbaar.
+Open **niet** poort 3306 of 3000. Die zijn bewust alleen intern bereikbaar.
 
 ## 🧑‍💻 Lokaal ontwikkelen
 
@@ -257,8 +266,8 @@ IoT-Dashboard/
 │   ├── src/
 │   │   ├── index.js             # Express app + opstarten
 │   │   ├── config.js            # Env validatie + rack basiswaarden
-│   │   ├── db.js                # PostgreSQL pool + schema init
-│   │   ├── schema.sql           # De 4 tabellen + 500-logs trigger
+│   │   ├── db.js                # MariaDB pool + schema init + 500-logs limiet
+│   │   ├── schema.sql           # De 4 tabellen
 │   │   ├── auth.js              # Register/login/logout/me
 │   │   ├── routes.js            # Settings, sensors, incidents
 │   │   └── simulator.js         # Sensorsimulatie + incidents
@@ -294,7 +303,7 @@ De camerafeed gebruikt je eigen foto. Sla die op als `public/serverroom.jpg`.
 
 ## 🐛 Troubleshooting
 
-**`POSTGRES_PASSWORD ontbreekt in .env`** — je hebt `.env.example` niet
+**`MARIADB_PASSWORD ontbreekt in .env`** — je hebt `.env.example` niet
 gekopieerd naar `.env`, of de waarden zijn leeg.
 
 **API blijft herstarten** — bekijk `docker compose logs api`. Meestal een te
@@ -316,21 +325,30 @@ de API-logs of je "Historische metingen aangemaakt" ziet.
 **Database bekijken**
 
 ```bash
-docker compose exec db psql -U iot_user -d iot_dashboard
+docker compose exec db mariadb -u iot_user -p iot_dashboard
+# Vul het MARIADB_PASSWORD uit je .env in
 
 # Handige queries:
-# SELECT COUNT(*) FROM sensor_data;       -- moet <= 500 zijn
+# SELECT COUNT(*) FROM sensor_data;        -- moet <= 500 zijn
 # SELECT * FROM settings ORDER BY rack_id;
 # SELECT username, last_login FROM users;
 # SELECT type, COUNT(*) FROM incidents GROUP BY type;
+# SHOW TABLES;
 ```
 
-**Poort 5432 tijdelijk openzetten om te debuggen** — voeg toe aan de `db`
+Of in één regel, zonder interactieve shell:
+
+```bash
+docker compose exec db mariadb -u iot_user -p"$(grep '^MARIADB_PASSWORD=' .env | cut -d= -f2-)" \
+  iot_dashboard -e "SELECT COUNT(*) AS metingen FROM sensor_data;"
+```
+
+**Poort 3306 tijdelijk openzetten om te debuggen** — voeg toe aan de `db`
 service in `docker-compose.yml`:
 
 ```yaml
 ports:
-  - "127.0.0.1:5432:5432"
+  - "127.0.0.1:3306:3306"
 ```
 
 Het `127.0.0.1:` voorvoegsel is belangrijk: daarmee is de database alleen vanaf

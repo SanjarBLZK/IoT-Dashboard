@@ -124,9 +124,10 @@ docker-compose up -d --build
 |----------|----------|---------|-------------|
 | `NODE_ENV` | ❌ No | production | Runtime environment |
 
-**Note**: Het dashboard heeft geen environment variabelen of API-keys nodig.
-Alles draait in de browser met lokale opslag. Zodra de PostgreSQL backend er
-is, komt hier een variabele bij voor de API-URL.
+**Note**: Dit rapport beschrijft alleen de frontend container. De volledige
+opzet bestaat inmiddels uit drie containers (MariaDB, API en nginx) en vereist
+een `.env` met `MARIADB_PASSWORD` en `JWT_SECRET`. Zie `README.md`, dat is
+leidend.
 
 ---
 

@@ -1,5 +1,5 @@
 import express from "express";
-import { query } from "./db.js";
+import { query, insertSensorReading } from "./db.js";
 import { requireAuth } from "./auth.js";
 import { config } from "./config.js";
 
@@ -26,16 +26,16 @@ function toSettings(row) {
   };
 }
 
+const SETTINGS_COLUMNS = `rack_id, temp_threshold_high, temp_threshold_low,
+                          humidity_threshold, updated_at`;
+
 // GET /api/settings
 apiRouter.get("/settings", async (_req, res, next) => {
   try {
-    const result = await query(
-      `SELECT rack_id, temp_threshold_high, temp_threshold_low,
-              humidity_threshold, updated_at
-       FROM settings
-       ORDER BY rack_id`
+    const rows = await query(
+      `SELECT ${SETTINGS_COLUMNS} FROM settings ORDER BY rack_id`
     );
-    res.json({ settings: result.rows.map(toSettings) });
+    res.json({ settings: rows.map(toSettings) });
   } catch (err) {
     next(err);
   }
@@ -70,23 +70,29 @@ apiRouter.put("/settings/:rackId", async (req, res, next) => {
         .json({ error: "Luchtvochtigheidsdrempel moet tussen 0 en 100 liggen." });
     }
 
-    const result = await query(
+    // MariaDB-variant van een upsert. De unieke index op rack_id zorgt dat
+    // een bestaande rij wordt bijgewerkt in plaats van gedupliceerd.
+    await query(
       `INSERT INTO settings
          (rack_id, temp_threshold_high, temp_threshold_low, humidity_threshold)
-       VALUES ($1, $2, $3, $4)
-       ON CONFLICT (rack_id) DO UPDATE SET
-         temp_threshold_high = EXCLUDED.temp_threshold_high,
-         temp_threshold_low  = EXCLUDED.temp_threshold_low,
-         humidity_threshold  = EXCLUDED.humidity_threshold
-       RETURNING rack_id, temp_threshold_high, temp_threshold_low,
-                 humidity_threshold, updated_at`,
+       VALUES (?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE
+         temp_threshold_high = VALUES(temp_threshold_high),
+         temp_threshold_low  = VALUES(temp_threshold_low),
+         humidity_threshold  = VALUES(humidity_threshold)`,
       [rackId, tempThresholdHigh, tempThresholdLow, humidityThreshold]
+    );
+
+    // Geen RETURNING in MariaDB bij een upsert: rij daarna teruglezen.
+    const rows = await query(
+      `SELECT ${SETTINGS_COLUMNS} FROM settings WHERE rack_id = ?`,
+      [rackId]
     );
 
     console.log(
       `⚙️  Drempelwaarden rack ${rackId} aangepast door ${req.user.username}`
     );
-    res.json({ settings: toSettings(result.rows[0]) });
+    res.json({ settings: toSettings(rows[0]) });
   } catch (err) {
     next(err);
   }
@@ -95,23 +101,22 @@ apiRouter.put("/settings/:rackId", async (req, res, next) => {
 // ===========================================================================
 // SENSOR DATA
 // ---------------------------------------------------------------------------
-// Er blijven maximaal 500 metingen bewaard (database trigger ruimt de oudste
-// automatisch op).
+// Er blijven maximaal 500 metingen bewaard; insertSensorReading() ruimt na
+// elke insert de oudste op.
 // ===========================================================================
 
 // GET /api/sensors
-//   Geeft de laatste meting per rack plus de historie, gegroepeerd per rack.
+//   Geeft alle bewaarde metingen, gegroepeerd per rack en oplopend in tijd.
 apiRouter.get("/sensors", async (_req, res, next) => {
   try {
-    const result = await query(
-      `SELECT rack_id, timestamp, temperature, humidity
+    const rows = await query(
+      `SELECT rack_id, \`timestamp\`, temperature, humidity
        FROM sensor_data
-       ORDER BY timestamp ASC, id ASC`
+       ORDER BY \`timestamp\` ASC, id ASC`
     );
 
-    // Groepeer per rack, oplopend in tijd (handig voor de grafieken).
     const byRack = {};
-    for (const row of result.rows) {
+    for (const row of rows) {
       const rackId = row.rack_id;
       byRack[rackId] ??= [];
       byRack[rackId].push({
@@ -144,14 +149,15 @@ apiRouter.post("/sensors", async (req, res, next) => {
       return res.status(400).json({ error: "humidity moet een getal zijn." });
     }
 
-    const result = await query(
-      `INSERT INTO sensor_data (rack_id, temperature, humidity)
-       VALUES ($1, $2, $3)
-       RETURNING id, rack_id, timestamp, temperature, humidity`,
-      [rackId, temperature, humidity]
+    const insertId = await insertSensorReading(rackId, temperature, humidity);
+
+    const rows = await query(
+      `SELECT id, rack_id, \`timestamp\`, temperature, humidity
+       FROM sensor_data WHERE id = ?`,
+      [insertId]
     );
 
-    res.status(201).json({ reading: result.rows[0] });
+    res.status(201).json({ reading: rows[0] });
   } catch (err) {
     next(err);
   }
@@ -174,17 +180,20 @@ function toIncident(row) {
 // GET /api/incidents?limit=50
 apiRouter.get("/incidents", async (req, res, next) => {
   try {
+    // MariaDB accepteert geen placeholder op de LIMIT-positie bij een
+    // prepared statement, dus we klemmen de waarde vast tot een geheel
+    // getal en zetten die direct in de query.
     const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 200);
+    const safeLimit = Math.floor(limit);
 
-    const result = await query(
-      `SELECT id, timestamp, type, image_path, description
+    const rows = await query(
+      `SELECT id, \`timestamp\`, type, image_path, description
        FROM incidents
-       ORDER BY timestamp DESC, id DESC
-       LIMIT $1`,
-      [limit]
+       ORDER BY \`timestamp\` DESC, id DESC
+       LIMIT ${safeLimit}`
     );
 
-    res.json({ incidents: result.rows.map(toIncident) });
+    res.json({ incidents: rows.map(toIncident) });
   } catch (err) {
     next(err);
   }
@@ -207,12 +216,17 @@ apiRouter.post("/incidents", async (req, res, next) => {
 
     const result = await query(
       `INSERT INTO incidents (type, description, image_path)
-       VALUES ($1, $2, $3)
-       RETURNING id, timestamp, type, image_path, description`,
+       VALUES (?, ?, ?)`,
       [type, description.trim(), imagePath]
     );
 
-    res.status(201).json({ incident: toIncident(result.rows[0]) });
+    const rows = await query(
+      `SELECT id, \`timestamp\`, type, image_path, description
+       FROM incidents WHERE id = ?`,
+      [result.insertId]
+    );
+
+    res.status(201).json({ incident: toIncident(rows[0]) });
   } catch (err) {
     next(err);
   }

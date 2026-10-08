@@ -1,4 +1,4 @@
-import { query } from "./db.js";
+import { query, enforceSensorLimit } from "./db.js";
 import { config, RACKS } from "./config.js";
 
 /**
@@ -53,13 +53,13 @@ export function deriveStatus(temperature, humidity, thresholds) {
 }
 
 async function loadThresholds() {
-  const result = await query(
+  const rows = await query(
     `SELECT rack_id, temp_threshold_high, temp_threshold_low, humidity_threshold
      FROM settings`
   );
 
   const map = new Map();
-  for (const row of result.rows) {
+  for (const row of rows) {
     map.set(row.rack_id, {
       tempThresholdHigh: Number(row.temp_threshold_high),
       tempThresholdLow: Number(row.temp_threshold_low),
@@ -69,16 +69,26 @@ async function loadThresholds() {
   return map;
 }
 
-/** Laatste meting per rack, als startpunt voor de volgende waarde. */
+/**
+ * Laatste meting per rack, als startpunt voor de volgende waarde.
+ *
+ * PostgreSQL had hiervoor `DISTINCT ON (rack_id)`, wat MariaDB niet kent.
+ * In plaats daarvan zoeken we per rack het hoogste id; omdat id
+ * AUTO_INCREMENT is, is dat altijd de nieuwste meting.
+ */
 async function loadLatestReadings() {
-  const result = await query(
-    `SELECT DISTINCT ON (rack_id) rack_id, temperature, humidity
-     FROM sensor_data
-     ORDER BY rack_id, timestamp DESC, id DESC`
+  const rows = await query(
+    `SELECT s.rack_id, s.temperature, s.humidity
+     FROM sensor_data AS s
+     INNER JOIN (
+       SELECT rack_id, MAX(id) AS max_id
+       FROM sensor_data
+       GROUP BY rack_id
+     ) AS latest ON latest.max_id = s.id`
   );
 
   const map = new Map();
-  for (const row of result.rows) {
+  for (const row of rows) {
     map.set(row.rack_id, {
       temperature: Number(row.temperature),
       humidity: Number(row.humidity),
@@ -89,12 +99,10 @@ async function loadLatestReadings() {
 
 async function createIncident(type, description, imagePath = null) {
   const result = await query(
-    `INSERT INTO incidents (type, description, image_path)
-     VALUES ($1, $2, $3)
-     RETURNING id`,
+    `INSERT INTO incidents (type, description, image_path) VALUES (?, ?, ?)`,
     [type, description, imagePath]
   );
-  return result.rows[0].id;
+  return result.insertId;
 }
 
 /**
@@ -105,6 +113,11 @@ async function tickSensors() {
   try {
     const thresholds = await loadThresholds();
     const latest = await loadLatestReadings();
+
+    // Alle metingen in een keer wegschrijven, daarna een keer opruimen.
+    const values = [];
+    const params = [];
+    const evaluated = [];
 
     for (const rack of RACKS) {
       const previous = latest.get(rack.id) ?? {
@@ -119,13 +132,21 @@ async function tickSensors() {
         (previous.humidity + randomBetween(-0.3, 0.3)).toFixed(1)
       );
 
-      await query(
-        `INSERT INTO sensor_data (rack_id, temperature, humidity)
-         VALUES ($1, $2, $3)`,
-        [rack.id, temperature, humidity]
-      );
+      values.push("(?, ?, ?)");
+      params.push(rack.id, temperature, humidity);
+      evaluated.push({ rack, temperature, humidity });
+    }
 
-      // Drempelcontrole
+    await query(
+      `INSERT INTO sensor_data (rack_id, temperature, humidity)
+       VALUES ${values.join(", ")}`,
+      params
+    );
+
+    await enforceSensorLimit();
+
+    // Drempelcontrole per rack.
+    for (const { rack, temperature, humidity } of evaluated) {
       const rackThresholds = thresholds.get(rack.id);
       if (!rackThresholds) continue;
 
@@ -182,13 +203,15 @@ function scheduleMotion() {
  * leeg beginnen. Genereert per rack een reeks metingen tot aan de 500-limiet.
  */
 async function seedHistoryIfEmpty() {
-  const result = await query("SELECT COUNT(*)::int AS count FROM sensor_data");
-  if (result.rows[0].count > 0) {
-    console.log(`📊 ${result.rows[0].count} bestaande metingen gevonden`);
+  const rows = await query("SELECT COUNT(*) AS count FROM sensor_data");
+  const existing = Number(rows[0].count);
+
+  if (existing > 0) {
+    console.log(`📊 ${existing} bestaande metingen gevonden`);
     return;
   }
 
-  // Verdeel de 500 beschikbare plekken over de racks.
+  // Verdeel de beschikbare plekken over de racks.
   const perRack = Math.floor(config.sensorLogLimit / RACKS.length);
   console.log(`🌱 Database is leeg, ${perRack} metingen per rack aanmaken...`);
 
@@ -196,34 +219,31 @@ async function seedHistoryIfEmpty() {
     let temperature = rack.baseTemp;
     let humidity = rack.baseHumidity;
 
-    const rows = [];
+    const values = [];
+    const params = [];
+
+    // Oudste eerst, zodat de id-volgorde gelijk loopt met de tijd.
     for (let i = perRack - 1; i >= 0; i--) {
       temperature = Number((temperature + randomBetween(-0.2, 0.2)).toFixed(1));
       humidity = Number((humidity + randomBetween(-0.3, 0.3)).toFixed(1));
-      rows.push({
-        timestamp: new Date(Date.now() - i * config.sensorIntervalMs),
+
+      values.push("(?, ?, ?, ?)");
+      params.push(
+        rack.id,
+        new Date(Date.now() - i * config.sensorIntervalMs),
         temperature,
-        humidity,
-      });
+        humidity
+      );
     }
 
-    // Een INSERT met meerdere rijen, zodat de limiet-trigger maar een keer
-    // hoeft te draaien.
-    const values = [];
-    const params = [];
-    rows.forEach((row, index) => {
-      const base = index * 4;
-      values.push(`($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4})`);
-      params.push(rack.id, row.timestamp, row.temperature, row.humidity);
-    });
-
     await query(
-      `INSERT INTO sensor_data (rack_id, timestamp, temperature, humidity)
+      `INSERT INTO sensor_data (rack_id, \`timestamp\`, temperature, humidity)
        VALUES ${values.join(", ")}`,
       params
     );
   }
 
+  await enforceSensorLimit();
   console.log("✅ Historische metingen aangemaakt");
 }
 

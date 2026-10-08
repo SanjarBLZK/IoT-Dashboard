@@ -5,7 +5,7 @@
  * meteen een duidelijke foutmelding dan een draaiende server die kwetsbaar is.
  */
 
-const REQUIRED = ["POSTGRES_PASSWORD", "JWT_SECRET"];
+const REQUIRED = ["MARIADB_PASSWORD", "JWT_SECRET"];
 
 // Waarden die duidelijk placeholders zijn en nooit in gebruik mogen zijn.
 const FORBIDDEN_SECRETS = [
@@ -13,7 +13,9 @@ const FORBIDDEN_SECRETS = [
   "change_me",
   "secret",
   "password",
-  "postgres",
+  "mariadb",
+  "mysql",
+  "root",
   "verander_dit",
   "your_secret_here",
 ];
@@ -48,9 +50,9 @@ if (FORBIDDEN_SECRETS.includes(jwtSecret.toLowerCase())) {
   );
 }
 
-if (FORBIDDEN_SECRETS.includes(process.env.POSTGRES_PASSWORD.trim().toLowerCase())) {
+if (FORBIDDEN_SECRETS.includes(process.env.MARIADB_PASSWORD.trim().toLowerCase())) {
   fail(
-    "POSTGRES_PASSWORD is een standaard placeholder. Kies een eigen wachtwoord."
+    "MARIADB_PASSWORD is een standaard placeholder. Kies een eigen wachtwoord."
   );
 }
 
@@ -59,11 +61,11 @@ export const config = {
   nodeEnv: process.env.NODE_ENV ?? "production",
 
   db: {
-    host: process.env.POSTGRES_HOST ?? "db",
-    port: Number(process.env.POSTGRES_PORT ?? 5432),
-    database: process.env.POSTGRES_DB ?? "iot_dashboard",
-    user: process.env.POSTGRES_USER ?? "iot_user",
-    password: process.env.POSTGRES_PASSWORD,
+    host: process.env.MARIADB_HOST ?? "db",
+    port: Number(process.env.MARIADB_PORT ?? 3306),
+    database: process.env.MARIADB_DATABASE ?? "iot_dashboard",
+    user: process.env.MARIADB_USER ?? "iot_user",
+    password: process.env.MARIADB_PASSWORD,
   },
 
   jwtSecret,
@@ -75,7 +77,7 @@ export const config = {
   },
 
   // Maximaal aantal sensor-metingen dat bewaard blijft. Oudere records
-  // worden automatisch verwijderd door een database trigger.
+  // worden na elke insert opgeruimd (zie db.js -> enforceSensorLimit).
   sensorLogLimit: Number(process.env.SENSOR_LOG_LIMIT ?? 500),
 
   // Interval waarmee nieuwe sensormetingen worden gegenereerd (ms).

@@ -197,7 +197,7 @@ Na het plaatsen van jouw foto:
 
 ## 🚀 Volgende Stappen (Optioneel)
 
-1. **PostgreSQL Integratie** - Zie `migrations/001_initial_schema.sql`
+1. **Database** - Al geïntegreerd, zie `server/src/schema.sql`
 2. **Meerdere Camera's** - Voeg CAM-02, CAM-03 toe
 3. **Echte Camera** - Integreer met IP camera of webcam
 4. **Video Recording** - Implementeer video opname feature

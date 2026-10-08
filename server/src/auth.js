@@ -9,6 +9,9 @@ export const authRouter = express.Router();
 const COOKIE_NAME = "iot_session";
 const BCRYPT_ROUNDS = 12;
 
+// Kolommen die we naar de client mogen sturen. Nooit password_hash.
+const PUBLIC_COLUMNS = "id, username, created_at, last_login";
+
 /**
  * Zet het sessiecookie.
  *
@@ -49,6 +52,15 @@ function toPublicUser(row) {
     createdAt: row.created_at,
     lastLogin: row.last_login,
   };
+}
+
+/** Haal een gebruiker op zonder de wachtwoordhash. */
+async function findUserById(id) {
+  const rows = await query(
+    `SELECT ${PUBLIC_COLUMNS} FROM users WHERE id = ?`,
+    [id]
+  );
+  return rows[0] ?? null;
 }
 
 /**
@@ -112,17 +124,16 @@ authRouter.post("/register", async (req, res, next) => {
     const normalized = username.trim().toLowerCase();
     const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
 
-    let result;
+    let insertId;
     try {
-      result = await query(
-        `INSERT INTO users (username, password_hash)
-         VALUES ($1, $2)
-         RETURNING id, username, created_at, last_login`,
+      const result = await query(
+        `INSERT INTO users (username, password_hash) VALUES (?, ?)`,
         [normalized, passwordHash]
       );
+      insertId = result.insertId;
     } catch (err) {
-      // 23505 = unique_violation
-      if (err.code === "23505") {
+      // 1062 = ER_DUP_ENTRY (unieke index op username)
+      if (err.errno === 1062 || err.code === "ER_DUP_ENTRY") {
         return res
           .status(409)
           .json({ error: "Deze gebruikersnaam is al in gebruik." });
@@ -131,14 +142,11 @@ authRouter.post("/register", async (req, res, next) => {
     }
 
     // Meteen inloggen: last_login vullen en cookie zetten.
-    const updated = await query(
-      `UPDATE users SET last_login = NOW()
-       WHERE id = $1
-       RETURNING id, username, created_at, last_login`,
-      [result.rows[0].id]
-    );
+    // MariaDB kent geen UPDATE ... RETURNING, dus we lezen de rij daarna terug.
+    await query("UPDATE users SET last_login = NOW() WHERE id = ?", [insertId]);
 
-    const user = toPublicUser(updated.rows[0]);
+    const row = await findUserById(insertId);
+    const user = toPublicUser(row);
     setSessionCookie(res, user, Boolean(remember));
 
     console.log(`✨ Nieuw account aangemaakt: ${user.username}`);
@@ -163,14 +171,12 @@ authRouter.post("/login", async (req, res, next) => {
 
     const normalized = username.trim().toLowerCase();
 
-    const result = await query(
-      `SELECT id, username, password_hash, created_at, last_login
-       FROM users
-       WHERE username = $1`,
+    const rows = await query(
+      `SELECT id, username, password_hash FROM users WHERE username = ?`,
       [normalized]
     );
 
-    const row = result.rows[0];
+    const row = rows[0];
 
     // Onbekende gebruiker: toch een hash vergelijken, zodat de responstijd
     // niet verraadt of het account bestaat.
@@ -191,14 +197,10 @@ authRouter.post("/login", async (req, res, next) => {
         .json({ error: "Onjuiste gebruikersnaam of wachtwoord." });
     }
 
-    const updated = await query(
-      `UPDATE users SET last_login = NOW()
-       WHERE id = $1
-       RETURNING id, username, created_at, last_login`,
-      [row.id]
-    );
+    await query("UPDATE users SET last_login = NOW() WHERE id = ?", [row.id]);
 
-    const user = toPublicUser(updated.rows[0]);
+    const fresh = await findUserById(row.id);
+    const user = toPublicUser(fresh);
     setSessionCookie(res, user, Boolean(remember));
 
     console.log(`🔓 Ingelogd: ${user.username}`);
@@ -223,17 +225,14 @@ authRouter.post("/logout", (req, res) => {
 // ---------------------------------------------------------------------------
 authRouter.get("/me", requireAuth, async (req, res, next) => {
   try {
-    const result = await query(
-      `SELECT id, username, created_at, last_login FROM users WHERE id = $1`,
-      [req.user.id]
-    );
+    const row = await findUserById(req.user.id);
 
-    if (result.rows.length === 0) {
+    if (!row) {
       clearSessionCookie(res);
       return res.status(401).json({ error: "Account bestaat niet meer." });
     }
 
-    res.json({ user: toPublicUser(result.rows[0]) });
+    res.json({ user: toPublicUser(row) });
   } catch (err) {
     next(err);
   }
@@ -246,8 +245,8 @@ authRouter.get("/me", requireAuth, async (req, res, next) => {
 // ---------------------------------------------------------------------------
 authRouter.get("/exists", async (_req, res, next) => {
   try {
-    const result = await query("SELECT EXISTS (SELECT 1 FROM users) AS present");
-    res.json({ hasAccount: result.rows[0].present });
+    const rows = await query("SELECT 1 AS present FROM users LIMIT 1");
+    res.json({ hasAccount: rows.length > 0 });
   } catch (err) {
     next(err);
   }

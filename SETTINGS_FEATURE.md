@@ -4,7 +4,7 @@
 
 De **Instellingen** pagina biedt controle over de drempelwaarden en audio.
 
-> ℹ️ **Bijgewerkt**: drempelwaarden staan nu in de PostgreSQL `settings` tabel
+> ℹ️ **Bijgewerkt**: drempelwaarden staan nu in de MariaDB `settings` tabel
 > en zijn gedeeld tussen alle apparaten. Alleen de audio voorkeuren blijven
 > lokaal per apparaat. Delen van dit document beschrijven nog de oude
 > localStorage-opzet; `README.md` is leidend.
